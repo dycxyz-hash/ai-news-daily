@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI 新闻聚合器 — 抓取多个 AI 相关 RSS 源，生成静态 HTML 页面。
+AI 新闻聚合器 — 抓取多个 AI 相关 RSS 源，生成中英双语静态 HTML 页面。
 
 用法:
     python generate.py                # 生成 index.html 到当前目录
@@ -13,7 +13,7 @@ import html as html_module
 import sys
 import os
 import re
-import json
+import time
 from datetime import datetime, timedelta, timezone, date
 from calendar import timegm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,95 +23,161 @@ from collections import defaultdict
 # 配置
 # ═══════════════════════════════════════════════════════════════════
 
-# 北京时间时区
 CST = timezone(timedelta(hours=8))
-
-# 数据保留天数
 MAX_DAYS = 7
-
-# 每个源的请求超时（秒）
 REQUEST_TIMEOUT = 10
-
-# 输出文件路径
 OUTPUT_FILE = "index.html"
+TRANSLATE_BATCH_DELAY = 1.5  # 每批翻译间隔秒数，避免被限流
+TRANSLATE_MAX_WORKERS = 3    # 翻译并发数
 
-# RSS 数据源列表
 RSS_SOURCES = [
-    {
-        "name": "OpenAI",
-        "name_zh": "OpenAI 官方博客",
-        "url": "https://openai.com/blog/rss.xml",
-        "color": "#10a37f",
-    },
-    {
-        "name": "Hugging Face",
-        "name_zh": "Hugging Face 博客",
-        "url": "https://huggingface.co/blog/feed.xml",
-        "color": "#ff9d00",
-    },
-    {
-        "name": "Google AI",
-        "name_zh": "Google AI 博客",
-        "url": "https://blog.google/technology/ai/rss/",
-        "color": "#4285f4",
-    },
-    {
-        "name": "IT之家",
-        "name_zh": "IT之家 · AI",
-        "url": "https://www.ithome.com/rss/",
-        "color": "#d50000",
-        # IT之家是综合科技媒体，需要 AI 关键词过滤
-        "keywords": [
-            "AI", "人工智能", "大模型", "GPT", "LLM", "智能", "机器人",
-            "算力", "芯片", "NVIDIA", "英伟达", "OpenAI", "ChatGPT",
-            "机器学习", "深度学习", "自动驾驶", "Agent", "智谱",
-            "模型", "算法", "数据中心", "神经网络", "GPU",
-            "Copilot", "Gemini", "Claude", "DeepSeek", "深度求索",
-        ],
-    },
-    {
-        "name": "TechCrunch AI",
-        "name_zh": "TechCrunch · AI",
-        "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
-        "color": "#0a960a",
-    },
-    {
-        "name": "ArXiv AI",
-        "name_zh": "ArXiv · 人工智能论文",
-        "url": "https://export.arxiv.org/rss/cs.AI",
-        "color": "#b31b1b",
-    },
-    {
-        "name": "36氪",
-        "name_zh": "36氪 · AI 频道",
-        "url": "https://36kr.com/feed",
-        "color": "#3370ff",
-        # 36kr 是综合科技媒体，需要关键词过滤
-        "keywords": [
-            "AI", "人工智能", "大模型", "GPT", "LLM", "智能", "机器人",
-            "算力", "芯片", "NVIDIA", "英伟达", "OpenAI", "ChatGPT",
-            "机器学习", "深度学习", "自动驾驶", "Agent", "智谱",
-            "Token", "数据", "数字人", "AI", "机器",
-        ],
-    },
-    {
-        "name": "量子位",
-        "name_zh": "量子位",
-        "url": "https://www.qbitai.com/feed",
-        "color": "#6c5ce7",
-    },
+    {"name": "OpenAI",      "url": "https://openai.com/blog/rss.xml",                    "color": "#10a37f"},
+    {"name": "Hugging Face","url": "https://huggingface.co/blog/feed.xml",               "color": "#ff9d00"},
+    {"name": "Google AI",   "url": "https://blog.google/technology/ai/rss/",             "color": "#4285f4"},
+    {"name": "TechCrunch",  "url": "https://techcrunch.com/category/artificial-intelligence/feed/", "color": "#0a960a"},
+    {"name": "ArXiv AI",    "url": "https://export.arxiv.org/rss/cs.AI",                  "color": "#b31b1b"},
+    {"name": "IT之家",       "url": "https://www.ithome.com/rss/",                         "color": "#d50000",
+     "keywords": ["AI","人工智能","大模型","GPT","LLM","智能","机器人","算力","芯片","NVIDIA","英伟达",
+                  "OpenAI","ChatGPT","机器学习","深度学习","自动驾驶","Agent","智谱","模型","算法",
+                  "数据中心","神经网络","GPU","Copilot","Gemini","Claude","DeepSeek","深度求索"]},
+    {"name": "36氪",         "url": "https://36kr.com/feed",                                "color": "#3370ff",
+     "keywords": ["AI","人工智能","大模型","GPT","LLM","智能","机器人","算力","芯片","NVIDIA","英伟达",
+                  "OpenAI","ChatGPT","机器学习","深度学习","自动驾驶","Agent","智谱","Token","数字人","机器"]},
+    {"name": "量子位",       "url": "https://www.qbitai.com/feed",                           "color": "#6c5ce7"},
 ]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 翻译模块
+# ═══════════════════════════════════════════════════════════════════
+
+def _has_cjk(text):
+    """检测文本是否包含中日韩字符。"""
+    for ch in text:
+        cp = ord(ch)
+        if (0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF or
+            0x3000 <= cp <= 0x303F or 0xFF00 <= cp <= 0xFFEF or
+            0x3040 <= cp <= 0x309F or 0x30A0 <= cp <= 0x30FF):
+            return True
+    return False
+
+
+def translate_text(text, target_lang):
+    """
+    翻译单段文本。失败时返回原文。
+    target_lang: 'zh' 或 'en'
+    """
+    if not text or not text.strip():
+        return text
+    try:
+        from deep_translator import GoogleTranslator
+        src = "auto"
+        result = GoogleTranslator(source=src, target="zh-CN" if target_lang == "zh" else "en").translate(text)
+        if result and result.strip():
+            return result.strip()
+    except Exception:
+        pass
+    return text
+
+
+def translate_entries(entries):
+    """
+    对所有条目进行双向翻译。
+    - 英文条目 → 翻译标题和摘要为中文
+    - 中文条目 → 翻译标题和摘要为英文
+    - 翻译失败则保持原文
+
+    返回: 条目列表，每个条目新增 zh_title, en_title, zh_summary, en_summary
+    """
+    print("\n🌐 正在翻译...")
+
+    # 分类：哪些需要英→中，哪些需要中→英
+    en_to_zh = []   # (index, entry)
+    zh_to_en = []
+
+    for i, e in enumerate(entries):
+        title = e.get("title", "")
+        if _has_cjk(title):
+            zh_to_en.append(i)
+        else:
+            en_to_zh.append(i)
+
+    total = len(en_to_zh) + len(zh_to_en)
+    if total == 0:
+        print("   无需翻译")
+        return entries
+
+    translated = 0
+    failed = 0
+
+    # 英→中
+    batch = []
+    for idx in en_to_zh:
+        e = entries[idx]
+        orig_title = e.get("title", "")
+        orig_summary = e.get("summary", "")
+        entries[idx]["en_title"] = orig_title
+        entries[idx]["en_summary"] = orig_summary
+
+        if orig_title:
+            batch.append((idx, "title", orig_title, "zh"))
+        if orig_summary:
+            batch.append((idx, "summary", orig_summary, "zh"))
+
+    for idx, field, text, target in batch:
+        result = translate_text(text, target)
+        entries[idx][f"zh_{field}"] = result if result else text
+        if result and result != text:
+            translated += 1
+        else:
+            failed += 1
+            entries[idx][f"zh_{field}"] = text
+        time.sleep(0.3)  # 限速
+
+    # 中→英
+    batch2 = []
+    for idx in zh_to_en:
+        e = entries[idx]
+        orig_title = e.get("title", "")
+        orig_summary = e.get("summary", "")
+        entries[idx]["zh_title"] = orig_title
+        entries[idx]["zh_summary"] = orig_summary
+
+        if orig_title:
+            batch2.append((idx, "title", orig_title, "en"))
+        if orig_summary:
+            batch2.append((idx, "summary", orig_summary, "en"))
+
+    for idx, field, text, target in batch2:
+        result = translate_text(text, target)
+        entries[idx][f"en_{field}"] = result if result else text
+        if result and result != text:
+            translated += 1
+        else:
+            failed += 1
+            entries[idx][f"en_{field}"] = text
+        time.sleep(0.3)
+
+    # 处理未被分类的条目（中英混合等边缘情况）
+    for i, e in enumerate(entries):
+        if "zh_title" not in e:
+            e["zh_title"] = e.get("title", "")
+        if "en_title" not in e:
+            e["en_title"] = e.get("title", "")
+        if "zh_summary" not in e:
+            e["zh_summary"] = e.get("summary", "")
+        if "en_summary" not in e:
+            e["en_summary"] = e.get("summary", "")
+
+    print(f"   完成: {translated} 条翻译成功, {failed} 条保持原文")
+    return entries
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 工具函数
 # ═══════════════════════════════════════════════════════════════════
 
-
 def parse_entry_date(entry, source_name):
-    """
-    从 feedparser entry 中提取发布时间。
-    返回 (datetime_in_utc, error_string_or_None)
-    """
     for attr in ("published_parsed", "updated_parsed"):
         val = getattr(entry, attr, None)
         if val is not None:
@@ -119,19 +185,11 @@ def parse_entry_date(entry, source_name):
                 return datetime.fromtimestamp(timegm(val), tz=timezone.utc), None
             except Exception:
                 pass
-
-    # 尝试手动解析 published 字符串
     published_str = getattr(entry, "published", "") or ""
     if published_str:
         try:
-            # 尝试多种常见格式
-            for fmt in (
-                "%a, %d %b %Y %H:%M:%S %z",
-                "%a, %d %b %Y %H:%M:%S %Z",
-                "%Y-%m-%dT%H:%M:%S%z",
-                "%Y-%m-%dT%H:%M:%SZ",
-                "%Y-%m-%d %H:%M:%S",
-            ):
+            for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z",
+                        "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S"):
                 try:
                     dt = datetime.strptime(published_str.strip(), fmt)
                     if dt.tzinfo is None:
@@ -141,69 +199,44 @@ def parse_entry_date(entry, source_name):
                     continue
         except Exception:
             pass
-
-    # 无法解析，使用当前时间并标记
     return datetime.now(timezone.utc), "无法解析日期"
 
 
 def fetch_feed(source):
-    """
-    抓取单个 RSS 源，返回 (source_name, entries_list, error_msg_or_None)。
-
-    每个 entry 为 dict: {title, link, published_dt, source_name, source_color}
-    """
     name = source["name"]
     url = source["url"]
     color = source["color"]
-
     try:
-        resp = requests.get(
-            url,
-            timeout=REQUEST_TIMEOUT,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (compatible; AI-News-Aggregator/1.0; "
-                    "+https://github.com/user/ai-news-aggregator)"
-                ),
-                "Accept": "application/rss+xml, application/xml, text/xml, */*",
-            },
-        )
+        resp = requests.get(url, timeout=REQUEST_TIMEOUT, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; AI-News-Aggregator/1.0)",
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+        })
         resp.raise_for_status()
-
-        # feedparser 尝试：先用 bytes，失败再用 text（处理编码/格式问题）
         feed = feedparser.parse(resp.content)
-
         if feed.bozo and not feed.entries:
-            # 回退：用 text 模式重试
             try:
                 resp.encoding = "utf-8"
                 feed = feedparser.parse(resp.text)
             except Exception:
                 pass
-
         if feed.bozo and not feed.entries:
-            return name, [], f"RSS 解析失败: {getattr(feed.bozo_exception, 'getMessage', lambda: str(feed.bozo_exception))()}"
+            err = getattr(feed.bozo_exception, 'getMessage', lambda: str(feed.bozo_exception))()
+            return name, [], f"RSS 解析失败: {err}"
 
         entries = []
         for entry in feed.entries:
             title = getattr(entry, "title", "").strip()
             link = getattr(entry, "link", "").strip()
-
             if not title:
                 continue
-
-            # 清理 HTML 标签
             title = re.sub(r"<[^>]+>", "", title)
             title = html_module.unescape(title)
 
-            # 关键词过滤（仅对配置了 keywords 的源生效，过滤非 AI 相关内容）
             keywords = source.get("keywords")
             if keywords:
-                title_lower = title.lower()
-                if not any(kw.lower() in title_lower for kw in keywords):
+                if not any(kw.lower() in title.lower() for kw in keywords):
                     continue
 
-            # 提取摘要（优先 summary，其次 description）
             summary = ""
             for attr in ("summary", "description"):
                 val = getattr(entry, attr, None)
@@ -211,579 +244,472 @@ def fetch_feed(source):
                     raw = val[0].get("value", "") if isinstance(val, list) else str(val)
                     raw = re.sub(r"<[^>]+>", "", raw)
                     raw = html_module.unescape(raw).strip()
-                    if len(raw) > 200:
-                        # 在完整句子处截断
-                        cut = raw.rfind("。", 0, 200)
-                        if cut == -1:
-                            cut = raw.rfind(". ", 0, 200)
-                        if cut == -1:
-                            cut = raw.rfind(" ", 0, 200)
-                        if cut > 50:
-                            raw = raw[:cut+1] + "…"
-                        else:
-                            raw = raw[:200] + "…"
+                    if len(raw) > 250:
+                        cut = raw.rfind("。", 0, 250)
+                        if cut < 80: cut = raw.rfind(". ", 0, 250)
+                        if cut < 80: cut = raw.rfind(" ", 0, 250)
+                        raw = raw[:cut+1] + "…" if cut > 50 else raw[:250] + "…"
                     summary = raw
                     break
 
             published_dt, date_error = parse_entry_date(entry, name)
-
-            entries.append(
-                {
-                    "title": title,
-                    "link": link or "#",
-                    "summary": summary,
-                    "published_dt": published_dt,
-                    "source_name": name,
-                    "source_color": color,
-                    "date_error": date_error,
-                }
-            )
+            entries.append({
+                "title": title, "link": link or "#", "summary": summary,
+                "published_dt": published_dt, "source_name": name,
+                "source_color": color, "date_error": date_error,
+            })
 
         status = "✓" if entries else "(空)"
         print(f"  [{status}] {name}: {len(entries)} 条")
-
         return name, entries, None
 
     except requests.exceptions.Timeout:
-        msg = f"请求超时 ({REQUEST_TIMEOUT}s)"
-        print(f"  [✗] {name}: {msg}")
-        return name, [], msg
-
+        return name, [], f"请求超时 ({REQUEST_TIMEOUT}s)"
     except requests.exceptions.ConnectionError as e:
-        msg = f"连接失败: {str(e)[:100]}"
-        print(f"  [✗] {name}: {msg}")
-        return name, [], msg
-
+        return name, [], f"连接失败: {str(e)[:100]}"
     except requests.exceptions.HTTPError as e:
-        msg = f"HTTP 错误: {e.response.status_code if e.response else str(e)[:100]}"
-        print(f"  [✗] {name}: {msg}")
-        return name, [], msg
-
+        code = e.response.status_code if e.response else "?"
+        return name, [], f"HTTP {code}"
     except Exception as e:
-        msg = f"未知错误: {str(e)[:200]}"
-        print(f"  [✗] {name}: {msg}")
-        return name, [], msg
+        return name, [], f"错误: {str(e)[:200]}"
 
 
 def normalize_title(title):
-    """标准化标题用于去重比对。"""
     return re.sub(r"\s+", " ", title.strip().lower())
 
 
 def beijing_date(dt):
-    """将 UTC datetime 转换为北京时间日期。"""
     return dt.astimezone(CST).date()
 
 
-def beijing_str(dt):
-    """将 UTC datetime 转换为北京时间字符串。"""
-    return dt.astimezone(CST).strftime("%Y-%m-%d %H:%M")
-
-
 # ═══════════════════════════════════════════════════════════════════
-# HTML 生成
+# HTML / CSS / JS
 # ═══════════════════════════════════════════════════════════════════
 
 CSS = r"""
 /* ── Reset ── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
 
 /* ── Variables ── */
 :root{
-    --green-50:#f1f8f4; --green-100:#dceee1; --green-200:#b8dbc0;
-    --green-300:#8cc598; --green-400:#5faa70; --green-500:#3d8c50;
-    --green-600:#2d6e3c; --green-700:#255831; --green-800:#1f4728;
-    --text:#1b281d; --text-muted:#5a6b5d; --text-light:#88998b;
-    --bg:#fff; --bg-alt:#f6faf7; --border:#e3ece5;
-    --shadow-sm:0 1px 3px rgba(0,0,0,.04); --shadow:0 2px 12px rgba(0,0,0,.06);
-    --radius-sm:6px; --radius:10px; --radius-lg:16px;
+    --g:#059669;--gd:#047857;--gl:#10b981;--gll:#d1fae5;--glg:#ecfdf5;
+    --tx:#111827;--t2:#4b5563;--t3:#9ca3af;
+    --bg:#fff;--bg2:#f9fafb;--br:#e5e7eb;
+    --r:12px;--rh:8px;
 }
 
 /* ── Body ── */
 body{
-    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    background:var(--bg); color:var(--text); line-height:1.65;
-    min-height:100vh; display:flex; flex-direction:column;
-    -webkit-font-smoothing:antialiased;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--tx);line-height:1.6;min-height:100vh;
+    display:flex;flex-direction:column;
 }
 
 /* ── Header ── */
 header{
-    background:linear-gradient(160deg,#1b5e2a 0%,#2e7d32 40%,#388e3c 70%,#43a047 100%);
-    color:#fff; padding:56px 24px 44px; text-align:center; position:relative; overflow:hidden;
+    padding:72px 24px 40px;text-align:center;position:relative;
+    background:linear-gradient(175deg,#f0fdf4 0%,#fff 60%,#fff 100%);
+    border-bottom:1px solid var(--gll);
 }
-header::after{
-    content:""; position:absolute; inset:0;
-    background:radial-gradient(ellipse at 20% 80%,rgba(255,255,255,.06) 0%,transparent 55%),
-              radial-gradient(ellipse at 75% 20%,rgba(255,255,255,.04) 0%,transparent 50%),
-              radial-gradient(ellipse at 50% 50%,rgba(0,0,0,.08) 0%,transparent 70%);
+header .lang-row{display:flex;justify-content:flex-end;max-width:720px;margin:0 auto 24px}
+header .lang-sw{
+    display:inline-flex;background:#f3f4f6;border-radius:20px;padding:2px;
 }
-header .lang-switch{
-    position:absolute; top:16px; right:20px; z-index:10;
-    display:flex; gap:2px; background:rgba(255,255,255,.15); border-radius:20px; padding:3px;
-    backdrop-filter:blur(8px);
+header .lang-sw button{
+    border:none;background:transparent;color:var(--t2);padding:6px 16px;
+    border-radius:18px;cursor:pointer;font-size:.8em;font-weight:500;
+    transition:all .2s;font-family:inherit;
 }
-header .lang-switch button{
-    border:none; background:transparent; color:rgba(255,255,255,.7);
-    padding:5px 14px; border-radius:18px; cursor:pointer; font-size:.82em;
-    font-weight:500; transition:all .2s; font-family:inherit;
-}
-header .lang-switch button.active{background:#fff; color:#2e7d32;}
-header .lang-switch button:hover:not(.active){color:#fff;}
-header h1{font-size:2.4em;font-weight:700;letter-spacing:-.01em;position:relative;z-index:1}
-header p{margin-top:6px;font-size:.95em;opacity:.75;position:relative;z-index:1;font-weight:400}
+header .lang-sw button.on{background:#fff;color:var(--g);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+header h1{font-size:2.6em;font-weight:800;letter-spacing:-.02em;color:var(--tx);
+    max-width:720px;margin:0 auto}
+header h1 span.grad{background:linear-gradient(135deg,var(--g),var(--gl));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text}
+header .sub{margin-top:10px;font-size:1.05em;color:var(--t3);font-weight:400;
+    max-width:720px;margin-left:auto;margin-right:auto}
 
-/* ── Stats Bar ── */
-.stats-bar{
-    display:flex;justify-content:center;gap:40px;flex-wrap:wrap;
-    padding:14px 20px;background:var(--bg-alt);border-bottom:1px solid var(--border);
-    font-size:.85em;color:var(--text-muted);
+/* ── Stats ── */
+.stats{
+    display:flex;justify-content:center;gap:48px;flex-wrap:wrap;
+    padding:20px 20px;background:var(--bg2);border-bottom:1px solid var(--br);
+    font-size:.88em;color:var(--t3);
 }
-.stats-bar .stat-num{font-weight:700;color:var(--green-600)}
-.stats-bar .stat-icon{opacity:.6;margin-right:2px}
+.stats .val{font-weight:700;color:var(--g);font-size:1.15em}
 
-/* ── Main ── */
-main{flex:1;max-width:780px;width:100%;margin:0 auto;padding:36px 20px 56px}
-
-/* ── Date Section ── */
-.date-section{margin-bottom:44px}
-.date-section h2{
-    font-size:1em;font-weight:600;color:var(--green-700);
-    padding-bottom:10px;border-bottom:1.5px solid var(--green-100);
-    margin-bottom:12px;position:sticky;top:0;background:var(--bg);z-index:2;
-    display:flex;align-items:center;gap:8px;
-}
-.date-section h2 .dot{width:7px;height:7px;border-radius:50%;background:var(--green-400);flex-shrink:0}
+/* ── Main layout ── */
+main-wrap{display:flex;max-width:1100px;width:100%;margin:0 auto;padding:0 20px;flex:1}
+main{flex:1;max-width:740px;width:100%;margin:0 auto;padding:40px 0 64px}
 
 /* ── Timeline ── */
-.timeline{
-    position:fixed;left:max(12px,calc((100vw - 840px)/2 - 56px));
-    top:50%;transform:translateY(-50%);z-index:100;
-    display:flex;flex-direction:column;gap:6px;
+aside.tl{
+    width:120px;flex-shrink:0;position:relative;padding-top:44px;
 }
-.timeline a{
+aside.tl .tl-line{
+    position:sticky;top:80px;padding-left:20px;
+    border-left:2px solid var(--gll);
+}
+aside.tl a{
     display:flex;align-items:center;gap:8px;text-decoration:none;
-    font-size:.7em;color:var(--text-light);padding:4px 8px;border-radius:14px;
-    transition:all .2s;white-space:nowrap;
+    color:var(--t3);font-size:.75em;font-weight:500;padding:6px 0;
+    position:relative;transition:color .2s;
 }
-.timeline a:hover,.timeline a.active{color:var(--green-600);background:var(--green-50)}
-.timeline a .tl-dot{width:6px;height:6px;border-radius:50%;background:var(--green-300);flex-shrink:0}
-.timeline a:hover .tl-dot,.timeline a.active .tl-dot{background:var(--green-500)}
-.timeline a .tl-label{display:none}
-.timeline a:hover .tl-label{display:inline}
+aside.tl a::before{
+    content:"";position:absolute;left:-26px;top:50%;transform:translateY(-50%);
+    width:10px;height:10px;border-radius:50%;background:#fff;
+    border:2px solid var(--gll);transition:all .25s;
+}
+aside.tl a:hover{color:var(--g)}
+aside.tl a:hover::before{border-color:var(--gl);background:var(--gll)}
+aside.tl a.on{color:var(--g);font-weight:700}
+aside.tl a.on::before{background:var(--g);border-color:var(--g);box-shadow:0 0 0 4px var(--gll)}
+aside.tl a .tl-lbl{opacity:0;transition:opacity .2s}
+aside.tl a:hover .tl-lbl{opacity:1}
+aside.tl a.on .tl-lbl{opacity:1}
+
+/* ── Date Section ── */
+.ds{margin-bottom:52px}
+.ds h2{
+    font-size:1em;font-weight:600;color:var(--t2);padding-bottom:12px;
+    border-bottom:1px solid var(--br);margin-bottom:4px;position:sticky;
+    top:0;background:var(--bg);z-index:2;display:flex;align-items:center;gap:10px;
+}
+.ds h2 .d-dot{width:8px;height:8px;border-radius:50%;background:var(--gl);flex-shrink:0}
 
 /* ── News Card ── */
 .news-list{list-style:none}
-.news-item{
-    display:flex;align-items:flex-start;gap:10px;
-    border-radius:var(--radius-sm);transition:background .12s;margin-bottom:2px;
+.ni{display:flex;align-items:flex-start;gap:12px;border-radius:var(--rh);
+    transition:background .12s;margin-bottom:0}
+.ni:hover{background:var(--glg)}
+.ni .src{
+    flex-shrink:0;display:inline-block;padding:2px 10px;border-radius:5px;
+    font-size:.7em;font-weight:600;color:#fff;line-height:1.7;white-space:nowrap;
+    letter-spacing:.01em;margin-top:10px;
 }
-.news-item:hover{background:var(--green-50)}
+.ni dt{flex:1;min-width:0}
+.ni dt summary{
+    list-style:none;cursor:pointer;padding:10px 12px;border-radius:var(--rh);
+    font-size:.95em;font-weight:510;color:var(--tx);
+    transition:color .15s;display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.ni dt summary::-webkit-details-marker{display:none}
+.ni dt summary::marker{display:none;content:''}
+.ni dt summary:hover{color:var(--g)}
+.ni dt summary .arr{flex-shrink:0;font-size:.6em;color:var(--t3);transition:transform .25s}
+.ni dt[open] summary{color:var(--gd);font-weight:600}
+.ni dt[open] summary .arr{transform:rotate(180deg)}
+.ni dt .nc{padding:4px 12px 16px;font-size:.88em;color:var(--t2);line-height:1.72;animation:fi .25s}
+.ni dt .nc p{margin-bottom:12px}
+.ni dt .nc .rm{
+    display:inline-flex;align-items:center;gap:6px;color:var(--g);text-decoration:none;
+    font-weight:600;font-size:.9em;padding:6px 16px;border-radius:20px;
+    background:var(--glg);transition:all .15s;
+}
+.ni dt .nc .rm:hover{background:var(--gll);color:var(--gd)}
+.ni dt .nc .rm::after{content:"→";transition:transform .2s}
+.ni dt .nc .rm:hover::after{transform:translateX(3px)}
+.np{padding:4px 12px 16px;font-size:.85em}
+.np .rm{
+    display:inline-flex;align-items:center;gap:6px;color:var(--g);text-decoration:none;
+    font-weight:600;font-size:.9em;padding:6px 16px;border-radius:20px;
+    background:var(--glg);transition:all .15s;
+}
+.np .rm:hover{background:var(--gll);color:var(--gd)}
+.np .rm::after{content:"→";transition:transform .2s}
+.np .rm:hover::after{transform:translateX(3px)}
 
-.source-badge{
-    flex-shrink:0;display:inline-block;padding:1px 9px;border-radius:4px;
-    font-size:.72em;font-weight:600;color:#fff;line-height:1.7;white-space:nowrap;
-    letter-spacing:.01em;opacity:.92;margin-top:9px;
-}
+@keyframes fi{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 
-/* ── Details / Accordion ── */
-.news-details{flex:1;min-width:0}
-.news-details summary{
-    list-style:none;cursor:pointer;padding:10px 12px;border-radius:var(--radius-sm);
-    font-size:.94em;font-weight:500;color:var(--text);
-    transition:color .15s,background .15s;
-    display:flex;align-items:center;justify-content:space-between;gap:8px;
-}
-.news-details summary::-webkit-details-marker{display:none}
-.news-details summary::marker{display:none;content:''}
-.news-details summary:hover{color:var(--green-600);background:var(--green-50)}
-.news-details summary .arrow{
-    flex-shrink:0;font-size:.65em;opacity:.3;transition:transform .25s;
-}
-.news-details[open] summary .arrow{transform:rotate(180deg)}
-.news-details[open] summary{color:var(--green-700);font-weight:600}
-
-.news-summary{
-    padding:6px 12px 14px;font-size:.88em;color:var(--text-muted);
-    line-height:1.7;animation:fadeIn .25s;
-}
-.news-summary p{margin-bottom:10px}
-.news-summary .read-more{
-    display:inline-block;color:var(--green-600);text-decoration:none;
-    font-weight:600;font-size:.92em;padding:5px 14px;
-    border:1px solid var(--green-200);border-radius:16px;
-    transition:all .15s;
-}
-.news-summary .read-more:hover{background:var(--green-100);border-color:var(--green-400)}
-.news-no-summary{padding:6px 12px 14px;font-size:.85em;color:var(--text-light)}
-
-@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-
-/* ── Empty State ── */
-.empty-state{text-align:center;padding:80px 24px;color:var(--text-light)}
-.empty-state .icon{font-size:2.8em;margin-bottom:14px}
-.empty-state p{font-size:1em}
+/* ── Empty ── */
+.empty{text-align:center;padding:100px 24px;color:var(--t3)}
+.empty .ic{font-size:3em;margin-bottom:16px}
+.empty p{font-size:1em}
 
 /* ── Footer ── */
 footer{
-    text-align:center;padding:24px;font-size:.78em;color:var(--text-light);
-    border-top:1px solid var(--border);margin-top:auto;background:var(--bg-alt);
+    text-align:center;padding:28px 20px;font-size:.78em;color:var(--t3);
+    border-top:1px solid var(--br);margin-top:auto;background:var(--bg2);
 }
-footer p+p{margin-top:3px}
-footer .error-item{color:#c62828;font-size:.88em;margin-top:3px}
-footer a{color:var(--green-600);text-decoration:none}
+footer p+p{margin-top:4px}
+footer .er{color:#dc2626;font-size:.85em;margin-top:3px}
+footer a{color:var(--g);text-decoration:none}
 footer a:hover{text-decoration:underline}
 
-/* ── Lang visibility ── */
-[data-lang]{display:none}
-html[lang="zh"] [data-lang="zh"]{display:revert}
-html[lang="en"] [data-lang="en"]{display:none}
-html[lang="en"] [data-lang="en"]{display:revert}
+/* ── Lang visibility (class-based, works 100%) ── */
+html.lang-zh [data-lang]{display:none}
+html.lang-zh [data-lang="zh"]{display:revert}
+html.lang-en [data-lang]{display:none}
+html.lang-en [data-lang="en"]{display:revert}
 
 /* ── Responsive ── */
-@media(max-width:860px){
-    .timeline{display:none}
+@media(max-width:900px){
+    aside.tl{display:none}
 }
 @media(max-width:640px){
-    header{padding:40px 18px 32px}
-    header h1{font-size:1.7em}
-    header .lang-switch{top:10px;right:10px}
-    main{padding:24px 12px 36px}
-    .stats-bar{gap:18px;font-size:.78em}
-    .news-details summary{font-size:.9em;padding:10px 8px}
-    .source-badge{font-size:.66em;padding:1px 6px;margin-top:9px}
-    .news-summary{font-size:.84em;padding:4px 8px 10px}
-    .news-item{gap:6px}
+    header{padding:48px 18px 32px}
+    header h1{font-size:1.8em}
+    main{padding:24px 0 36px}
+    .stats{gap:20px;font-size:.8em}
+    .ni dt summary{font-size:.9em;padding:10px 8px}
+    .ni .src{font-size:.64em;padding:1px 7px;margin-top:10px}
+    .ni{gap:6px}
+    .ni dt .nc{font-size:.84em;padding:4px 8px 12px}
 }
 """
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 多语言字符串
-# ═══════════════════════════════════════════════════════════════════
-
-I18N = {
-    "zh": {
-        "lang_label": "中文",
-        "page_title": "🧠 AI 发展日报",
-        "site_desc": "每小时自动聚合 AI 领域最新资讯",
-        "stats_articles": "条新闻",
-        "stats_sources": "源正常",
-        "stats_days_prefix": "保留最近",
-        "stats_days_suffix": "天",
-        "today": "今天",
-        "yesterday": "昨天",
-        "weekdays": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
-        "empty_title": "暂无新闻数据",
-        "empty_hint": "请稍后再来，或手动触发更新。",
-        "footer_update": "最后更新",
-        "footer_timezone": "北京时间",
-        "footer_sources": "数据来源",
-        "footer_powered": "由 GitHub Actions 自动更新 · RSS 聚合",
-        "error_prefix": "⚠️",
-    },
-    "en": {
-        "lang_label": "English",
-        "page_title": "🧠 AI Daily",
-        "site_desc": "Hourly AI news aggregation",
-        "stats_articles": "articles",
-        "stats_sources": "sources OK",
-        "stats_days_prefix": "Last",
-        "stats_days_suffix": "days",
-        "today": "Today",
-        "yesterday": "Yesterday",
-        "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        "empty_title": "No news yet",
-        "empty_hint": "Check back later or trigger a manual update.",
-        "footer_update": "Last updated",
-        "footer_timezone": "CST",
-        "footer_sources": "Sources",
-        "footer_powered": "Powered by GitHub Actions · RSS Aggregation",
-        "error_prefix": "⚠️",
-    },
-}
-
 JS = r"""
 <script>
-// ── Language switcher ──
 (function(){
-    var L = (localStorage.getItem('ai-news-lang') || 'zh');
-    document.documentElement.lang = L;
-    var btns = document.querySelectorAll('.lang-switch button');
-    function setLang(l){
-        document.documentElement.lang = l;
-        localStorage.setItem('ai-news-lang', l);
-        btns.forEach(function(b){b.classList.toggle('active', b.dataset.lang === l)});
+    // Lang
+    var L=localStorage.getItem('ai-news-lang')||'zh';
+    var H=document.documentElement;
+    H.className='lang-'+L;
+    var btns=document.querySelectorAll('.lang-sw button');
+    function sl(l){
+        H.className='lang-'+l;
+        localStorage.setItem('ai-news-lang',l);
+        btns.forEach(function(b){b.classList.toggle('on',b.dataset.lang===l)});
     }
-    btns.forEach(function(b){b.addEventListener('click',function(){setLang(this.dataset.lang)})});
-    setLang(L);
-})();
+    btns.forEach(function(b){b.addEventListener('click',function(){sl(this.dataset.lang)})});
+    sl(L);
 
-// ── Timeline scroll-spy ──
-(function(){
-    var links = document.querySelectorAll('.timeline a');
-    if (!links.length) return;
-    var sections = [];
-    links.forEach(function(a){
-        var id = a.getAttribute('href').slice(1);
-        var el = document.getElementById(id);
-        if (el) sections.push({el:el, a:a});
-    });
-    function update(){
-        var scrollY = window.scrollY + 80;
-        var active = null;
-        sections.forEach(function(s){
-            if (s.el.offsetTop <= scrollY) active = s.a;
+    // Timeline
+    var links=document.querySelectorAll('.tl a');
+    if(links.length){
+        var sec=[];
+        links.forEach(function(a){
+            var el=document.getElementById(a.getAttribute('href').slice(1));
+            if(el) sec.push({el:el,a:a});
         });
-        links.forEach(function(a){a.classList.remove('active')});
-        if (active) active.classList.add('active');
+        function up(){
+            var sy=window.scrollY+100;
+            var ac=null;
+            sec.forEach(function(s){if(s.el.offsetTop<=sy) ac=s.a;});
+            links.forEach(function(a){a.classList.remove('on')});
+            if(ac) ac.classList.add('on');
+        }
+        window.addEventListener('scroll',up,{passive:true});
+        up();
     }
-    window.addEventListener('scroll', update, {passive:true});
-    update();
 })();
 </script>
 """
 
+# ═══════════════════════════════════════════════════════════════════
+# i18n
+# ═══════════════════════════════════════════════════════════════════
+
+I18N = {
+    "zh": {
+        "title": "AI 发展日报",
+        "sub": "每小时自动聚合全球 AI 资讯",
+        "articles": "条新闻",
+        "sources_ok": "源正常",
+        "last_days": "保留最近",
+        "days": "天",
+        "today": "今天", "yesterday": "昨天",
+        "wd": ["周一","周二","周三","周四","周五","周六","周日"],
+        "empty": "暂无新闻数据", "empty_hint": "请稍后刷新页面。",
+        "updated": "最后更新", "tz": "北京时间",
+        "sources_label": "数据来源",
+        "read_more": "阅读原文",
+        "powered": "由 GitHub Actions 每小时自动更新",
+    },
+    "en": {
+        "title": "AI Daily",
+        "sub": "Hourly AI news from across the web",
+        "articles": "articles",
+        "sources_ok": "sources OK",
+        "last_days": "Last",
+        "days": "days",
+        "today": "Today", "yesterday": "Yesterday",
+        "wd": ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+        "empty": "No news yet", "empty_hint": "Check back later.",
+        "updated": "Last updated", "tz": "CST",
+        "sources_label": "Sources",
+        "read_more": "Read more",
+        "powered": "Powered by GitHub Actions · Hourly updates",
+    },
+}
+
 
 def i18n_date_label(d, lang):
-    """生成日期标签，今天/昨天显示特殊文字。"""
     today = datetime.now(CST).date()
     t = I18N[lang]
     if d == today:
         return f"{t['today']} · {d}"
     elif d == today - timedelta(days=1):
         return f"{t['yesterday']} · {d}"
-    else:
-        wd = t["weekdays"][d.weekday()]
-        return f"{wd} · {d}"
+    return f"{t['wd'][d.weekday()]} · {d}"
 
+
+# ═══════════════════════════════════════════════════════════════════
+# HTML 生成
+# ═══════════════════════════════════════════════════════════════════
 
 def generate_html(entries_by_date, update_time, errors):
-    """
-    生成完整 HTML 页面。
+    total = sum(len(v) for v in entries_by_date.values())
+    sc = len(RSS_SOURCES)
+    ok = sc - len(errors)
 
-    entries_by_date: OrderedDict[date -> list of entry dicts]
-    update_time: str (北京时间)
-    errors: list of (source_name, error_msg)
-    """
-    # ── 统计数据 ──
-    total_articles = sum(len(v) for v in entries_by_date.values())
-    source_count = len(RSS_SOURCES)
-    success_count = source_count - len(errors)
-
-    # ── 构建日期区块 ──
-    date_sections_html = ""
-
-    timeline_links = ""
+    # ── Timeline ──
+    tl_html = ""
+    ds_html = ""
 
     if entries_by_date:
         for d, entries in sorted(entries_by_date.items(), reverse=True):
-            date_id = f"date-{d.isoformat()}"
-            label_zh = i18n_date_label(d, "zh")
-            label_en = i18n_date_label(d, "en")
+            did = f"d{d.isoformat()}"
+            sl = f"{d.month}/{d.day}"
+            tl_html += f'<a href="#{did}"><span class="tl-lbl">{sl}</span></a>\n'
 
-            # 时间轴条目
-            short_label = f"{d.month}/{d.day}"
-            timeline_links += (
-                f'<a href="#{date_id}">'
-                f'<span class="tl-dot"></span>'
-                f'<span class="tl-label">{short_label}</span>'
-                f'</a>\n'
-            )
+            label_zh = html_module.escape(i18n_date_label(d, "zh"))
+            label_en = html_module.escape(i18n_date_label(d, "en"))
 
-            items_html = ""
+            items = ""
             for e in entries:
                 badge = (
-                    f'<span class="source-badge" style="background:{e["source_color"]};" '
-                    f'title="{html_module.escape(e["source_name"])}">'
+                    f'<span class="src" style="background:{e["source_color"]}">'
                     f'{html_module.escape(e["source_name"])}</span>'
                 )
-                if e.get("summary"):
+                zh_title = html_module.escape(e.get("zh_title") or e.get("title", ""))
+                en_title = html_module.escape(e.get("en_title") or e.get("title", ""))
+                zh_sum = html_module.escape(e.get("zh_summary") or e.get("summary", ""))
+                en_sum = html_module.escape(e.get("en_summary") or e.get("summary", ""))
+                link = html_module.escape(e.get("link", "#"))
+
+                rm_zh = I18N["zh"]["read_more"]
+                rm_en = I18N["en"]["read_more"]
+
+                if e.get("summary") or e.get("zh_summary") or e.get("en_summary"):
                     body = (
-                        f'<div class="news-summary">'
-                        f'<p>{html_module.escape(e["summary"])}</p>'
-                        f'<a href="{html_module.escape(e["link"])}" '
-                        f'target="_blank" rel="noopener noreferrer" class="read-more">'
-                        f'<span data-lang="zh">阅读原文</span>'
-                        f'<span data-lang="en">Read more</span>'
-                        f' →</a></div>'
+                        f'<div class="nc">'
+                        f'<p data-lang="zh">{zh_sum}</p>'
+                        f'<p data-lang="en">{en_sum}</p>'
+                        f'<a href="{link}" target="_blank" rel="noopener" class="rm">'
+                        f'<span data-lang="zh">{rm_zh}</span>'
+                        f'<span data-lang="en">{rm_en}</span></a>'
+                        f'</div>'
                     )
                 else:
                     body = (
-                        f'<div class="news-no-summary">'
-                        f'<a href="{html_module.escape(e["link"])}" '
-                        f'target="_blank" rel="noopener noreferrer" class="read-more">'
-                        f'<span data-lang="zh">阅读原文</span>'
-                        f'<span data-lang="en">Read more</span>'
-                        f' →</a></div>'
+                        f'<div class="np">'
+                        f'<a href="{link}" target="_blank" rel="noopener" class="rm">'
+                        f'<span data-lang="zh">{rm_zh}</span>'
+                        f'<span data-lang="en">{rm_en}</span></a>'
+                        f'</div>'
                     )
-                items_html += (
-                    f'<li class="news-item">'
-                    f'{badge}'
-                    f'<details class="news-details">'
-                    f'<summary>{html_module.escape(e["title"])}'
-                    f'<span class="arrow">▾</span></summary>'
-                    f'{body}'
-                    f'</details>'
-                    f'</li>\n'
+
+                items += (
+                    f'<li class="ni">{badge}'
+                    f'<dt class="nd"><summary>'
+                    f'<span data-lang="zh">{zh_title}</span>'
+                    f'<span data-lang="en">{en_title}</span>'
+                    f'<span class="arr">▾</span></summary>{body}</dt></li>\n'
                 )
 
-            date_sections_html += (
-                f'<section class="date-section" id="{date_id}">\n'
-                f'<h2><span class="dot"></span>'
+            ds_html += (
+                f'<section class="ds" id="{did}">\n'
+                f'<h2><span class="d-dot"></span>'
                 f'<span data-lang="zh">{label_zh}</span>'
-                f'<span data-lang="en">{label_en}</span>'
-                f'</h2>\n'
-                f'<ul class="news-list">\n{items_html}</ul>\n'
-                f'</section>\n'
+                f'<span data-lang="en">{label_en}</span></h2>\n'
+                f'<ul class="news-list">\n{items}</ul>\n</section>\n'
             )
     else:
-        date_sections_html = (
-            '<div class="empty-state">\n'
-            '<div class="icon">📭</div>\n'
-            f'<p data-lang="zh">{html_module.escape(I18N["zh"]["empty_title"])}</p>\n'
-            f'<p data-lang="en">{html_module.escape(I18N["en"]["empty_title"])}</p>\n'
-            f'<p data-lang="zh" style="font-size:.88em;margin-top:6px;">{html_module.escape(I18N["zh"]["empty_hint"])}</p>\n'
-            f'<p data-lang="en" style="font-size:.88em;margin-top:6px;">{html_module.escape(I18N["en"]["empty_hint"])}</p>\n'
-            '</div>\n'
+        ds_html = (
+            f'<div class="empty"><div class="ic">📭</div>'
+            f'<p data-lang="zh">{I18N["zh"]["empty"]}</p>'
+            f'<p data-lang="en">{I18N["en"]["empty"]}</p>'
+            f'<p data-lang="zh" style="font-size:.85em;margin-top:6px">{I18N["zh"]["empty_hint"]}</p>'
+            f'<p data-lang="en" style="font-size:.85em;margin-top:6px">{I18N["en"]["empty_hint"]}</p>'
+            f'</div>'
         )
 
-    # ── 错误信息 ──
-    errors_html = ""
+    # ── Errors ──
+    err_html = ""
     if errors:
-        for src_name, err_msg in errors:
-            errors_html += (
-                f'<p class="error-item">'
-                f'⚠️ {html_module.escape(src_name)}: {html_module.escape(err_msg)}'
-                f'</p>\n'
-            )
+        for sn, em in errors:
+            err_html += f'<p class="er">⚠️ {html_module.escape(sn)}: {html_module.escape(em)}</p>\n'
 
-    repo = _repo_placeholder()
-    repo_link = f'https://github.com/{repo}' if repo else "#"
-    sources_str = ", ".join(html_module.escape(s["name"]) for s in RSS_SOURCES)
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    gl = f"https://github.com/{repo}" if repo else "#"
+    src_list = ", ".join(html_module.escape(s["name"]) for s in RSS_SOURCES)
 
-    # ── 组装页面 ──
-    html_content = f"""<!DOCTYPE html>
-<html lang="zh">
+    return f"""<!DOCTYPE html>
+<html class="lang-zh">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="AI 发展日报 — 每日自动聚合 AI 领域最新资讯 | AI Daily — Automated AI news aggregation">
+<meta name="description" content="AI 发展日报 · AI Daily — 每小时自动聚合全球 AI 资讯">
 <meta name="color-scheme" content="light">
-<title>🧠 AI 发展日报 / AI Daily</title>
+<title>🧠 AI 发展日报 · AI Daily</title>
 <style>{CSS}</style>
 </head>
 <body>
 
 <header>
-    <div class="lang-switch">
-        <button data-lang="zh">中文</button>
-        <button data-lang="en">English</button>
-    </div>
-    <h1 data-lang="zh">🧠 AI 发展日报</h1>
-    <h1 data-lang="en">🧠 AI Daily</h1>
-    <p data-lang="zh">{html_module.escape(I18N["zh"]["site_desc"])}</p>
-    <p data-lang="en">{html_module.escape(I18N["en"]["site_desc"])}</p>
+<div class="lang-row">
+<div class="lang-sw">
+<button data-lang="zh">中文</button>
+<button data-lang="en">English</button>
+</div>
+</div>
+<h1 data-lang="zh">🧠 <span class="grad">AI 发展日报</span></h1>
+<h1 data-lang="en">🧠 <span class="grad">AI Daily</span></h1>
+<p class="sub" data-lang="zh">{html_module.escape(I18N["zh"]["sub"])}</p>
+<p class="sub" data-lang="en">{html_module.escape(I18N["en"]["sub"])}</p>
 </header>
 
-<div class="stats-bar">
-    <span>
-        <span class="stat-icon">📰</span>
-        <span class="stat-num">{total_articles}</span>
-        <span data-lang="zh">{I18N["zh"]["stats_articles"]}</span>
-        <span data-lang="en">{I18N["en"]["stats_articles"]}</span>
-    </span>
-    <span>
-        <span class="stat-icon">📡</span>
-        <span class="stat-num">{success_count}/{source_count}</span>
-        <span data-lang="zh">{I18N["zh"]["stats_sources"]}</span>
-        <span data-lang="en">{I18N["en"]["stats_sources"]}</span>
-    </span>
-    <span>
-        <span class="stat-icon">📆</span>
-        <span data-lang="zh">{I18N["zh"]["stats_days_prefix"]}</span>
-        <span data-lang="en">{I18N["en"]["stats_days_prefix"]}</span>
-        &nbsp;<span class="stat-num">{MAX_DAYS}</span>&nbsp;
-        <span data-lang="zh">{I18N["zh"]["stats_days_suffix"]}</span>
-        <span data-lang="en">{I18N["en"]["stats_days_suffix"]}</span>
-    </span>
+<div class="stats">
+<span>📰 <span class="val">{total}</span> <span data-lang="zh">{I18N["zh"]["articles"]}</span><span data-lang="en">{I18N["en"]["articles"]}</span></span>
+<span>📡 <span class="val">{ok}/{sc}</span> <span data-lang="zh">{I18N["zh"]["sources_ok"]}</span><span data-lang="en">{I18N["en"]["sources_ok"]}</span></span>
+<span>📆 <span data-lang="zh">{I18N["zh"]["last_days"]}</span><span data-lang="en">{I18N["en"]["last_days"]}</span> <span class="val">{MAX_DAYS}</span> <span data-lang="zh">{I18N["zh"]["days"]}</span><span data-lang="en">{I18N["en"]["days"]}</span></span>
 </div>
 
-{f'''<nav class="timeline" aria-label="Date navigation">
-{timeline_links}
-</nav>''' if timeline_links else ""}
+<main-wrap>
+{f'<aside class="tl"><nav class="tl-line">{tl_html}</nav></aside>' if tl_html else ''}
 
 <main>
-{date_sections_html}
+{ds_html}
 </main>
+</main-wrap>
 
 <footer>
-    <p>
-        🕐 <span data-lang="zh">{I18N["zh"]["footer_update"]}：{html_module.escape(update_time)}（{I18N["zh"]["footer_timezone"]}）</span>
-        <span data-lang="en">{I18N["en"]["footer_update"]}: {html_module.escape(update_time)} ({I18N["en"]["footer_timezone"]})</span>
-    </p>
-    <p>
-        <span data-lang="zh">{I18N["zh"]["footer_sources"]}：{sources_str}</span>
-        <span data-lang="en">{I18N["en"]["footer_sources"]}: {sources_str}</span>
-    </p>
-{errors_html}
-    <p style="margin-top:6px;">
-        <span data-lang="zh">{I18N["zh"]["footer_powered"]}</span>
-        <span data-lang="en">{I18N["en"]["footer_powered"]}</span>
-        · <a href="{repo_link}" target="_blank" rel="noopener">GitHub</a>
-    </p>
+<p>🕐 <span data-lang="zh">{I18N["zh"]["updated"]}：{html_module.escape(update_time)}（{I18N["zh"]["tz"]}）</span><span data-lang="en">{I18N["en"]["updated"]}: {html_module.escape(update_time)} ({I18N["en"]["tz"]})</span></p>
+<p><span data-lang="zh">{I18N["zh"]["sources_label"]}：{src_list}</span><span data-lang="en">{I18N["en"]["sources_label"]}: {src_list}</span></p>
+{err_html}
+<p style="margin-top:8px"><span data-lang="zh">{I18N["zh"]["powered"]}</span><span data-lang="en">{I18N["en"]["powered"]}</span> · <a href="{gl}">GitHub</a></p>
 </footer>
 
 {JS}
 </body>
 </html>"""
 
-    return html_content
-
-
-def _repo_placeholder():
-    """尝试从环境变量获取仓库信息，否则返回占位符。"""
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    if repo:
-        return repo
-    return ""
-
 
 # ═══════════════════════════════════════════════════════════════════
 # 主逻辑
 # ═══════════════════════════════════════════════════════════════════
 
-
 def main():
     output_path = OUTPUT_FILE
-
-    # 解析命令行参数
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         if args[i] in ("-o", "--output") and i + 1 < len(args):
-            output_path = args[i + 1]
-            i += 2
+            output_path = args[i + 1]; i += 2
         elif args[i] in ("-h", "--help"):
-            print(__doc__)
-            return
+            print(__doc__); return
         else:
-            print(f"未知参数: {args[i]}")
-            print(__doc__)
-            sys.exit(1)
+            print(f"未知参数: {args[i]}"); print(__doc__); sys.exit(1)
 
     print("=" * 60)
     print("🧠 AI 新闻聚合器")
     print(f"   运行时间: {datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
     print(f"   数据源数量: {len(RSS_SOURCES)}")
     print(f"   保留天数: {MAX_DAYS}")
-    print(f"   输出文件: {output_path}")
     print("=" * 60)
 
-    # ── 并发抓取所有源 ──
+    # ── 抓取 ──
     print("\n📡 正在抓取 RSS 源...\n")
-
     all_entries = []
     fetch_errors = []
 
@@ -807,47 +733,40 @@ def main():
         if key not in seen:
             seen.add(key)
             unique_entries.append(entry)
+    dup = len(all_entries) - len(unique_entries)
+    if dup:
+        print(f"\n🔍 去重: 移除 {dup} 条重复条目")
 
-    duplicate_count = len(all_entries) - len(unique_entries)
-    if duplicate_count:
-        print(f"\n🔍 去重: 移除 {duplicate_count} 条重复条目")
+    # ── 翻译 ──
+    unique_entries = translate_entries(unique_entries)
 
-    # ── 按北京时间日期分组 ──
+    # ── 按日期分组（北京时间） ──
     cutoff_date = datetime.now(CST).date() - timedelta(days=MAX_DAYS)
     entries_by_date = defaultdict(list)
-
     for entry in unique_entries:
         d = beijing_date(entry["published_dt"])
         if d >= cutoff_date:
             entries_by_date[d].append(entry)
-
-    # 每组内按时间倒序排列
     for d in entries_by_date:
         entries_by_date[d].sort(key=lambda e: e["published_dt"], reverse=True)
 
     # ── 生成 HTML ──
     print(f"\n📝 生成 HTML...")
     update_time = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
+    html_content = generate_html(entries_by_date, update_time, fetch_errors)
 
     out_dir = os.path.dirname(os.path.abspath(output_path))
     if out_dir and not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
-
-    html_content = generate_html(entries_by_date, update_time, fetch_errors)
-
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
-    # ── 打印摘要 ──
+    # ── 摘要 ──
     total = sum(len(v) for v in entries_by_date.values())
     ok_sources = len(RSS_SOURCES) - len(fetch_errors)
     print(f"\n{'=' * 60}")
     print(f"✅ 完成！")
-    print(f"   新闻总数: {total} 条（去重后）")
-    print(f"   成功源:   {ok_sources}/{len(RSS_SOURCES)}")
-    print(f"   日期范围: {min(entries_by_date.keys()) if entries_by_date else 'N/A'}"
-          f" ~ {max(entries_by_date.keys()) if entries_by_date else 'N/A'}")
-    print(f"   输出文件: {os.path.abspath(output_path)}")
+    print(f"   新闻总数: {total} 条  成功源: {ok_sources}/{len(RSS_SOURCES)}")
     if fetch_errors:
         print(f"\n⚠️  以下源抓取失败:")
         for name, msg in fetch_errors:
