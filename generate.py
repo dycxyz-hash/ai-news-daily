@@ -64,20 +64,17 @@ def _has_cjk(text):
 def translate_text(text, target_lang):
     """
     使用 MyMemory 免费 API 翻译。失败时返回原文。
-    target_lang: 'zh' 或 'en'
     """
     if not text or not text.strip():
         return text
     try:
         src_lang = "zh-CN" if _has_cjk(text) else "en"
         target = "zh-CN" if target_lang == "zh" else "en"
-        # 如果源和目标相同，不需要翻译
         if (src_lang == "zh-CN" and target == "zh-CN") or (src_lang == "en" and target == "en"):
             return text
-
         pair = f"{src_lang}|{target}"
-        url = "https://api.mymemory.translated.net/get"
-        resp = requests.get(url, params={"q": text, "langpair": pair}, timeout=15)
+        resp = requests.get("https://api.mymemory.translated.net/get",
+                            params={"q": text, "langpair": pair}, timeout=8)
         data = resp.json()
         if data.get("responseStatus") == 200:
             result = data.get("responseData", {}).get("translatedText", "")
@@ -88,96 +85,65 @@ def translate_text(text, target_lang):
     return text
 
 
+def _translate_one(args):
+    """并发翻译单个任务。"""
+    idx, field, text, target = args
+    result = translate_text(text, target)
+    return idx, field, result if result and result != text else text
+
+
 def translate_entries(entries):
     """
-    对所有条目进行双向翻译。
-    - 英文条目 → 翻译标题和摘要为中文
-    - 中文条目 → 翻译标题和摘要为英文
-    - 翻译失败则保持原文
-
-    返回: 条目列表，每个条目新增 zh_title, en_title, zh_summary, en_summary
+    对所有条目进行双向翻译（并发）。翻译失败则保持原文。
     """
     print("\n🌐 正在翻译...")
-
-    # 分类：哪些需要英→中，哪些需要中→英
-    en_to_zh = []   # (index, entry)
-    zh_to_en = []
+    tasks = []
 
     for i, e in enumerate(entries):
         title = e.get("title", "")
-        if _has_cjk(title):
-            zh_to_en.append(i)
-        else:
-            en_to_zh.append(i)
+        summary = e.get("summary", "")
+        is_cjk = _has_cjk(title)
 
-    total = len(en_to_zh) + len(zh_to_en)
-    if total == 0:
+        # 初始化默认值
+        e["zh_title"] = title
+        e["en_title"] = title
+        e["zh_summary"] = summary
+        e["en_summary"] = summary
+
+        if is_cjk:
+            # 中文 → 需要英文
+            if title:
+                tasks.append((i, "en_title", title, "en"))
+            if summary:
+                tasks.append((i, "en_summary", summary, "en"))
+        else:
+            # 英文 → 需要中文
+            if title:
+                tasks.append((i, "zh_title", title, "zh"))
+            if summary:
+                tasks.append((i, "zh_summary", summary, "zh"))
+
+    if not tasks:
         print("   无需翻译")
         return entries
 
-    translated = 0
-    failed = 0
+    # 并发翻译
+    ok_count = 0
+    fail_count = 0
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        futures = {ex.submit(_translate_one, t): t for t in tasks}
+        for future in as_completed(futures):
+            try:
+                idx, field, result = future.result()
+                entries[idx][field] = result
+                if result != entries[idx].get("title", "") and result != entries[idx].get("summary", ""):
+                    ok_count += 1
+                else:
+                    fail_count += 1
+            except Exception:
+                fail_count += 1
 
-    # 英→中
-    batch = []
-    for idx in en_to_zh:
-        e = entries[idx]
-        orig_title = e.get("title", "")
-        orig_summary = e.get("summary", "")
-        entries[idx]["en_title"] = orig_title
-        entries[idx]["en_summary"] = orig_summary
-
-        if orig_title:
-            batch.append((idx, "title", orig_title, "zh"))
-        if orig_summary:
-            batch.append((idx, "summary", orig_summary, "zh"))
-
-    for idx, field, text, target in batch:
-        result = translate_text(text, target)
-        entries[idx][f"zh_{field}"] = result if result else text
-        if result and result != text:
-            translated += 1
-        else:
-            failed += 1
-            entries[idx][f"zh_{field}"] = text
-        time.sleep(0.3)  # 限速
-
-    # 中→英
-    batch2 = []
-    for idx in zh_to_en:
-        e = entries[idx]
-        orig_title = e.get("title", "")
-        orig_summary = e.get("summary", "")
-        entries[idx]["zh_title"] = orig_title
-        entries[idx]["zh_summary"] = orig_summary
-
-        if orig_title:
-            batch2.append((idx, "title", orig_title, "en"))
-        if orig_summary:
-            batch2.append((idx, "summary", orig_summary, "en"))
-
-    for idx, field, text, target in batch2:
-        result = translate_text(text, target)
-        entries[idx][f"en_{field}"] = result if result else text
-        if result and result != text:
-            translated += 1
-        else:
-            failed += 1
-            entries[idx][f"en_{field}"] = text
-        time.sleep(0.3)
-
-    # 处理未被分类的条目（中英混合等边缘情况）
-    for i, e in enumerate(entries):
-        if "zh_title" not in e:
-            e["zh_title"] = e.get("title", "")
-        if "en_title" not in e:
-            e["en_title"] = e.get("title", "")
-        if "zh_summary" not in e:
-            e["zh_summary"] = e.get("summary", "")
-        if "en_summary" not in e:
-            e["en_summary"] = e.get("summary", "")
-
-    print(f"   完成: {translated} 条翻译成功, {failed} 条保持原文")
+    print(f"   完成: {ok_count}/{len(tasks)} 条翻译成功, {fail_count} 条失败")
     return entries
 
 
