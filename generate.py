@@ -72,12 +72,15 @@ def fetch_feed(src):
             kw=src.get("keywords")
             if kw and not any(k.lower() in t.lower() for k in kw): continue
             sm=""
-            for a in ("summary","description"):
+            for a in ("summary","description","content"):
                 v=getattr(e,a,None)
                 if v:
-                    raw=v[0].get("value","") if isinstance(v,list) else str(v)
+                    if isinstance(v,list) and v:
+                        raw=v[0].get("value","") if isinstance(v[0],dict) else str(v[0])
+                    else:
+                        raw=str(v)
                     raw=re.sub(r"<[^>]+>","",raw); sm=H.unescape(raw).strip()
-                    break
+                    if sm: break
             pd,de=parse_entry_date(e,n)
             entries.append({"title":t,"link":lk or "#","summary":sm,
                            "published_dt":pd,"source_name":n,"source_color":c,"date_error":de})
