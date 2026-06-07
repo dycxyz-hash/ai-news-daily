@@ -62,10 +62,10 @@ RSS_SOURCES = [
         "color": "#e53935",
     },
     {
-        "name": "MarkTechPost",
-        "name_zh": "MarkTechPost · AI",
-        "url": "https://www.marktechpost.com/feed/",
-        "color": "#1565c0",
+        "name": "The Verge AI",
+        "name_zh": "The Verge · AI",
+        "url": "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml",
+        "color": "#00897b",
     },
     {
         "name": "机器之心",
@@ -162,8 +162,16 @@ def fetch_feed(source):
         )
         resp.raise_for_status()
 
-        # feedparser 可以接受原始字节或字符串
+        # feedparser 尝试：先用 bytes，失败再用 text（处理编码/格式问题）
         feed = feedparser.parse(resp.content)
+
+        if feed.bozo and not feed.entries:
+            # 回退：用 text 模式重试
+            try:
+                resp.encoding = "utf-8"
+                feed = feedparser.parse(resp.text)
+            except Exception:
+                pass
 
         if feed.bozo and not feed.entries:
             return name, [], f"RSS 解析失败: {getattr(feed.bozo_exception, 'getMessage', lambda: str(feed.bozo_exception))()}"
