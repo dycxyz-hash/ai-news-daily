@@ -56,10 +56,10 @@ RSS_SOURCES = [
         "color": "#4285f4",
     },
     {
-        "name": "VentureBeat AI",
-        "name_zh": "VentureBeat · AI",
-        "url": "https://venturebeat.com/category/ai/feed/",
-        "color": "#e53935",
+        "name": "AI News",
+        "name_zh": "AI News",
+        "url": "https://www.artificialintelligence-news.com/feed/",
+        "color": "#0077b6",
     },
     {
         "name": "TechCrunch AI",
