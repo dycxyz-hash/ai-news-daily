@@ -1,4 +1,4 @@
-name: AI News Daily Update
+name: AI News Hourly Update
 
 on:
   schedule:
