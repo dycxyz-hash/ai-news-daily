@@ -56,16 +56,16 @@ RSS_SOURCES = [
         "color": "#4285f4",
     },
     {
-        "name": "MIT Tech Review",
-        "name_zh": "MIT 科技评论 · AI",
-        "url": "https://www.technologyreview.com/feed/topic/artificial-intelligence/",
-        "color": "#d32f2f",
+        "name": "VentureBeat AI",
+        "name_zh": "VentureBeat · AI",
+        "url": "https://venturebeat.com/category/ai/feed/",
+        "color": "#e53935",
     },
     {
-        "name": "Anthropic",
-        "name_zh": "Anthropic 博客",
-        "url": "https://www.anthropic.com/blog/rss.xml",
-        "color": "#141413",
+        "name": "MarkTechPost",
+        "name_zh": "MarkTechPost · AI",
+        "url": "https://www.marktechpost.com/feed/",
+        "color": "#1565c0",
     },
     {
         "name": "机器之心",
@@ -75,9 +75,16 @@ RSS_SOURCES = [
     },
     {
         "name": "36氪",
-        "name_zh": "36氪",
+        "name_zh": "36氪 · AI 频道",
         "url": "https://36kr.com/feed",
         "color": "#3370ff",
+        # 36kr 是综合科技媒体，需要关键词过滤
+        "keywords": [
+            "AI", "人工智能", "大模型", "GPT", "LLM", "智能", "机器人",
+            "算力", "芯片", "NVIDIA", "英伟达", "OpenAI", "ChatGPT",
+            "机器学习", "深度学习", "自动驾驶", "Agent", "智谱",
+            "Token", "数据", "数字人", "AI", "机器",
+        ],
     },
     {
         "name": "量子位",
@@ -172,6 +179,13 @@ def fetch_feed(source):
             # 清理 HTML 标签
             title = re.sub(r"<[^>]+>", "", title)
             title = html_module.unescape(title)
+
+            # 关键词过滤（仅对配置了 keywords 的源生效，过滤非 AI 相关内容）
+            keywords = source.get("keywords")
+            if keywords:
+                title_lower = title.lower()
+                if not any(kw.lower() in title_lower for kw in keywords):
+                    continue
 
             published_dt, date_error = parse_entry_date(entry, name)
 
