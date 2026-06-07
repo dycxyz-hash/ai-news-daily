@@ -775,8 +775,16 @@ def main():
     if dup:
         print(f"\n🔍 去重: 移除 {dup} 条重复条目")
 
-    # ── 翻译 ──
-    unique_entries = translate_entries(unique_entries)
+    # ── 翻译暂时跳过（免费 API 在 GitHub Actions 中不稳定）──
+    # 需要翻译时取消下面注释：
+    # unique_entries = translate_entries(unique_entries)
+    for e in unique_entries:
+        t = e.get("title", "")
+        s = e.get("summary", "")
+        e["zh_title"] = t
+        e["en_title"] = t
+        e["zh_summary"] = s
+        e["en_summary"] = s
 
     # ── 按日期分组（北京时间） ──
     cutoff_date = datetime.now(CST).date() - timedelta(days=MAX_DAYS)
