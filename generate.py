@@ -94,7 +94,8 @@ def _translate_one(args):
 
 def translate_entries(entries):
     """
-    对所有条目进行双向翻译（并发）。翻译失败则保持原文。
+    对所有条目进行双向翻译（并发，总超时 45 秒）。
+    翻译失败或超时则保持原文。
     """
     print("\n🌐 正在翻译...")
     tasks = []
@@ -103,47 +104,43 @@ def translate_entries(entries):
         title = e.get("title", "")
         summary = e.get("summary", "")
         is_cjk = _has_cjk(title)
-
-        # 初始化默认值
         e["zh_title"] = title
         e["en_title"] = title
         e["zh_summary"] = summary
         e["en_summary"] = summary
-
         if is_cjk:
-            # 中文 → 需要英文
-            if title:
-                tasks.append((i, "en_title", title, "en"))
-            if summary:
-                tasks.append((i, "en_summary", summary, "en"))
+            if title: tasks.append((i, "en_title", title, "en"))
+            if summary: tasks.append((i, "en_summary", summary, "en"))
         else:
-            # 英文 → 需要中文
-            if title:
-                tasks.append((i, "zh_title", title, "zh"))
-            if summary:
-                tasks.append((i, "zh_summary", summary, "zh"))
+            if title: tasks.append((i, "zh_title", title, "zh"))
+            if summary: tasks.append((i, "zh_summary", summary, "zh"))
 
     if not tasks:
         print("   无需翻译")
         return entries
 
-    # 并发翻译
     ok_count = 0
     fail_count = 0
+    deadline = time.time() + 45  # 总超时 45 秒
+
     with ThreadPoolExecutor(max_workers=5) as ex:
         futures = {ex.submit(_translate_one, t): t for t in tasks}
         for future in as_completed(futures):
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                # 超时，取消剩余任务
+                for f in futures:
+                    f.cancel()
+                fail_count += len(futures) - ok_count
+                break
             try:
-                idx, field, result = future.result()
+                idx, field, result = future.result(timeout=remaining)
                 entries[idx][field] = result
-                if result != entries[idx].get("title", "") and result != entries[idx].get("summary", ""):
-                    ok_count += 1
-                else:
-                    fail_count += 1
+                ok_count += 1
             except Exception:
                 fail_count += 1
 
-    print(f"   完成: {ok_count}/{len(tasks)} 条翻译成功, {fail_count} 条失败")
+    print(f"   完成: {ok_count}/{len(tasks)} 条翻译成功, {fail_count} 条失败 (超时自动跳过)")
     return entries
 
 
