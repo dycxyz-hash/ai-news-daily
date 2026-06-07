@@ -394,7 +394,7 @@ I18N = {
     "zh": {
         "lang_label": "中文",
         "page_title": "🧠 AI 发展日报",
-        "site_desc": "每日自动聚合 AI 领域最新资讯 · 北京时间 8:00 更新",
+        "site_desc": "每小时自动聚合 AI 领域最新资讯",
         "stats_articles": "条新闻",
         "stats_sources": "源正常",
         "stats_days_prefix": "保留最近",
@@ -413,7 +413,7 @@ I18N = {
     "en": {
         "lang_label": "English",
         "page_title": "🧠 AI Daily",
-        "site_desc": "Daily AI news aggregation · Updates at 8:00 AM CST",
+        "site_desc": "Hourly AI news aggregation",
         "stats_articles": "articles",
         "stats_sources": "sources OK",
         "stats_days_prefix": "Last",
