@@ -257,231 +257,209 @@ def beijing_str(dt):
     return dt.astimezone(CST).strftime("%Y-%m-%d %H:%M")
 
 
-def date_label(d):
-    """生成日期标签，今天/昨天显示特殊文字。"""
-    today = datetime.now(CST).date()
-    if d == today:
-        return f"📅 今天 · {d}"
-    elif d == today - timedelta(days=1):
-        return f"📅 昨天 · {d}"
-    else:
-        weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][d.weekday()]
-        return f"📅 {weekday} · {d}"
-
-
 # ═══════════════════════════════════════════════════════════════════
 # HTML 生成
 # ═══════════════════════════════════════════════════════════════════
 
-CSS = """
-/* ── Reset & Base ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+CSS = r"""
+/* ── Reset ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-                 "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue",
-                 Arial, sans-serif;
-    background: #ffffff;
-    color: #1a1a1a;
-    line-height: 1.7;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+/* ── Variables ── */
+:root{
+    --green-50:#f1f8f4; --green-100:#dceee1; --green-200:#b8dbc0;
+    --green-300:#8cc598; --green-400:#5faa70; --green-500:#3d8c50;
+    --green-600:#2d6e3c; --green-700:#255831; --green-800:#1f4728;
+    --text:#1b281d; --text-muted:#5a6b5d; --text-light:#88998b;
+    --bg:#fff; --bg-alt:#f6faf7; --border:#e3ece5;
+    --shadow-sm:0 1px 3px rgba(0,0,0,.04); --shadow:0 2px 12px rgba(0,0,0,.06);
+    --radius-sm:6px; --radius:10px; --radius-lg:16px;
+}
+
+/* ── Body ── */
+body{
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.65;
+    min-height:100vh; display:flex; flex-direction:column;
+    -webkit-font-smoothing:antialiased;
 }
 
 /* ── Header ── */
-header {
-    background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-    color: #fff;
-    padding: 48px 24px 40px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
+header{
+    background:linear-gradient(160deg,#1b5e2a 0%,#2e7d32 40%,#388e3c 70%,#43a047 100%);
+    color:#fff; padding:56px 24px 44px; text-align:center; position:relative; overflow:hidden;
 }
-
-header::before {
-    content: "";
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(
-        circle at 30% 70%,
-        rgba(255, 255, 255, 0.03) 0%,
-        transparent 50%
-    ),
-    radial-gradient(
-        circle at 70% 30%,
-        rgba(255, 255, 255, 0.04) 0%,
-        transparent 50%
-    );
-    pointer-events: none;
+header::after{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(ellipse at 20% 80%,rgba(255,255,255,.06) 0%,transparent 55%),
+              radial-gradient(ellipse at 75% 20%,rgba(255,255,255,.04) 0%,transparent 50%),
+              radial-gradient(ellipse at 50% 50%,rgba(0,0,0,.08) 0%,transparent 70%);
 }
-
-header h1 {
-    font-size: 2.2em;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    position: relative;
-    z-index: 1;
+header .lang-switch{
+    position:absolute; top:16px; right:20px; z-index:10;
+    display:flex; gap:2px; background:rgba(255,255,255,.15); border-radius:20px; padding:3px;
+    backdrop-filter:blur(8px);
 }
-
-header p {
-    margin-top: 8px;
-    font-size: 0.95em;
-    opacity: 0.7;
-    position: relative;
-    z-index: 1;
+header .lang-switch button{
+    border:none; background:transparent; color:rgba(255,255,255,.7);
+    padding:5px 14px; border-radius:18px; cursor:pointer; font-size:.82em;
+    font-weight:500; transition:all .2s; font-family:inherit;
 }
+header .lang-switch button.active{background:#fff; color:#2e7d32;}
+header .lang-switch button:hover:not(.active){color:#fff;}
+header h1{font-size:2.4em;font-weight:700;letter-spacing:-.01em;position:relative;z-index:1}
+header p{margin-top:6px;font-size:.95em;opacity:.75;position:relative;z-index:1;font-weight:400}
 
 /* ── Stats Bar ── */
-.stats-bar {
-    display: flex;
-    justify-content: center;
-    gap: 32px;
-    flex-wrap: wrap;
-    padding: 16px 24px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e9ecef;
-    font-size: 0.88em;
-    color: #6b7280;
+.stats-bar{
+    display:flex;justify-content:center;gap:40px;flex-wrap:wrap;
+    padding:14px 20px;background:var(--bg-alt);border-bottom:1px solid var(--border);
+    font-size:.85em;color:var(--text-muted);
 }
+.stats-bar .stat-num{font-weight:700;color:var(--green-600)}
+.stats-bar .stat-icon{opacity:.6;margin-right:2px}
 
-.stats-bar span {
-    white-space: nowrap;
-}
-
-.stats-bar .stat-num {
-    font-weight: 700;
-    color: #302b63;
-}
-
-/* ── Main Content ── */
-main {
-    flex: 1;
-    max-width: 860px;
-    width: 100%;
-    margin: 0 auto;
-    padding: 32px 20px 48px;
-}
+/* ── Main ── */
+main{flex:1;max-width:780px;width:100%;margin:0 auto;padding:36px 20px 56px}
 
 /* ── Date Section ── */
-.date-section {
-    margin-bottom: 40px;
+.date-section{margin-bottom:44px}
+.date-section h2{
+    font-size:1em;font-weight:600;color:var(--green-700);
+    padding-bottom:10px;border-bottom:1.5px solid var(--green-100);
+    margin-bottom:12px;position:sticky;top:0;background:var(--bg);z-index:2;
+    display:flex;align-items:center;gap:8px;
 }
-
-.date-section h2 {
-    font-size: 1.15em;
-    font-weight: 600;
-    color: #374151;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #e5e7eb;
-    margin-bottom: 16px;
-    position: sticky;
-    top: 0;
-    background: #fff;
-    z-index: 2;
-}
+.date-section h2 .dot{width:7px;height:7px;border-radius:50%;background:var(--green-400);flex-shrink:0}
 
 /* ── News Card ── */
-.news-list {
-    list-style: none;
+.news-list{list-style:none}
+.news-item{
+    display:flex;align-items:flex-start;gap:12px;
+    padding:11px 14px;border-radius:var(--radius-sm);
+    transition:background .12s;margin-bottom:1px;
 }
-
-.news-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    padding: 14px 16px;
-    border-radius: 10px;
-    transition: background 0.15s ease;
-    margin-bottom: 2px;
+.news-item:hover{background:var(--green-50)}
+.source-badge{
+    flex-shrink:0;display:inline-block;padding:1px 9px;border-radius:4px;
+    font-size:.72em;font-weight:600;color:#fff;line-height:1.7;white-space:nowrap;
+    letter-spacing:.01em;opacity:.92;
 }
-
-.news-item:hover {
-    background: #f9fafb;
-}
-
-.source-badge {
-    flex-shrink: 0;
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 5px;
-    font-size: 0.78em;
-    font-weight: 600;
-    color: #fff;
-    line-height: 1.6;
-    white-space: nowrap;
-    margin-top: 1px;
-}
-
-.news-item a {
-    color: #1a1a1a;
-    text-decoration: none;
-    font-size: 0.98em;
-    font-weight: 500;
-    transition: color 0.15s ease;
-    word-break: break-word;
-}
-
-.news-item a:hover {
-    color: #302b63;
-}
-
-.news-item a::after {
-    content: " ↗";
-    font-size: 0.75em;
-    opacity: 0.35;
-}
+.news-item a{color:var(--text);text-decoration:none;font-size:.94em;font-weight:480;word-break:break-word}
+.news-item a:hover{color:var(--green-600)}
+.news-link-icon{font-size:.7em;opacity:.25;margin-left:2px}
 
 /* ── Empty State ── */
-.empty-state {
-    text-align: center;
-    padding: 80px 24px;
-    color: #9ca3af;
-}
-
-.empty-state .icon {
-    font-size: 3em;
-    margin-bottom: 16px;
-}
-
-.empty-state p {
-    font-size: 1.05em;
-}
+.empty-state{text-align:center;padding:80px 24px;color:var(--text-light)}
+.empty-state .icon{font-size:2.8em;margin-bottom:14px}
+.empty-state p{font-size:1em}
 
 /* ── Footer ── */
-footer {
-    text-align: center;
-    padding: 28px 24px;
-    font-size: 0.82em;
-    color: #9ca3af;
-    border-top: 1px solid #f0f0f0;
-    margin-top: auto;
+footer{
+    text-align:center;padding:24px;font-size:.78em;color:var(--text-light);
+    border-top:1px solid var(--border);margin-top:auto;background:var(--bg-alt);
 }
+footer p+p{margin-top:3px}
+footer .error-item{color:#c62828;font-size:.88em;margin-top:3px}
+footer a{color:var(--green-600);text-decoration:none}
+footer a:hover{text-decoration:underline}
 
-footer p + p {
-    margin-top: 4px;
-}
-
-footer .error-item {
-    color: #d32f2f;
-    font-size: 0.9em;
-    margin-top: 2px;
-}
+/* ── Lang hide ── */
+[data-lang]{display:none}
+html[lang="zh"] [data-lang="zh"]{display:unset}
+html[lang="zh"] [data-lang="zh"].news-item{display:flex}
+html[lang="en"] [data-lang="en"]{display:unset}
+html[lang="en"] [data-lang="en"].news-item{display:flex}
 
 /* ── Responsive ── */
-@media (max-width: 640px) {
-    header { padding: 32px 20px 28px; }
-    header h1 { font-size: 1.6em; }
-    main { padding: 20px 14px 32px; }
-    .stats-bar { gap: 16px; font-size: 0.8em; }
-    .news-item { padding: 12px 10px; gap: 10px; }
-    .source-badge { font-size: 0.72em; padding: 1px 8px; }
-    .news-item a { font-size: 0.92em; }
+@media(max-width:640px){
+    header{padding:40px 18px 32px}
+    header h1{font-size:1.7em}
+    header .lang-switch{top:10px;right:10px}
+    main{padding:24px 12px 36px}
+    .stats-bar{gap:18px;font-size:.78em}
+    .news-item{padding:10px 8px;gap:8px}
+    .source-badge{font-size:.68em;padding:1px 7px}
+    .news-item a{font-size:.9em}
 }
 """
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 多语言字符串
+# ═══════════════════════════════════════════════════════════════════
+
+I18N = {
+    "zh": {
+        "lang_label": "中文",
+        "page_title": "🧠 AI 发展日报",
+        "site_desc": "每日自动聚合 AI 领域最新资讯 · 北京时间 8:00 更新",
+        "stats_articles": "条新闻",
+        "stats_sources": "源正常",
+        "stats_days_prefix": "保留最近",
+        "stats_days_suffix": "天",
+        "today": "今天",
+        "yesterday": "昨天",
+        "weekdays": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+        "empty_title": "暂无新闻数据",
+        "empty_hint": "请稍后再来，或手动触发更新。",
+        "footer_update": "最后更新",
+        "footer_timezone": "北京时间",
+        "footer_sources": "数据来源",
+        "footer_powered": "由 GitHub Actions 自动更新 · RSS 聚合",
+        "error_prefix": "⚠️",
+    },
+    "en": {
+        "lang_label": "English",
+        "page_title": "🧠 AI Daily",
+        "site_desc": "Daily AI news aggregation · Updates at 8:00 AM CST",
+        "stats_articles": "articles",
+        "stats_sources": "sources OK",
+        "stats_days_prefix": "Last",
+        "stats_days_suffix": "days",
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        "empty_title": "No news yet",
+        "empty_hint": "Check back later or trigger a manual update.",
+        "footer_update": "Last updated",
+        "footer_timezone": "CST",
+        "footer_sources": "Sources",
+        "footer_powered": "Powered by GitHub Actions · RSS Aggregation",
+        "error_prefix": "⚠️",
+    },
+}
+
+JS = r"""
+<script>
+(function(){
+    var L = (localStorage.getItem('ai-news-lang') || 'zh');
+    document.documentElement.lang = L;
+    var btns = document.querySelectorAll('.lang-switch button');
+    function setLang(l){
+        document.documentElement.lang = l;
+        localStorage.setItem('ai-news-lang', l);
+        btns.forEach(function(b){b.classList.toggle('active', b.dataset.lang === l)});
+    }
+    btns.forEach(function(b){b.addEventListener('click',function(){setLang(this.dataset.lang)})});
+    setLang(L);
+})();
+</script>
+"""
+
+
+def i18n_date_label(d, lang):
+    """生成日期标签，今天/昨天显示特殊文字。"""
+    today = datetime.now(CST).date()
+    t = I18N[lang]
+    if d == today:
+        return f"{t['today']} · {d}"
+    elif d == today - timedelta(days=1):
+        return f"{t['yesterday']} · {d}"
+    else:
+        wd = t["weekdays"][d.weekday()]
+        return f"{wd} · {d}"
 
 
 def generate_html(entries_by_date, update_time, errors):
@@ -492,77 +470,112 @@ def generate_html(entries_by_date, update_time, errors):
     update_time: str (北京时间)
     errors: list of (source_name, error_msg)
     """
-    # 构建日期区块
+    # ── 统计数据 ──
+    total_articles = sum(len(v) for v in entries_by_date.values())
+    source_count = len(RSS_SOURCES)
+    success_count = source_count - len(errors)
+
+    # ── 构建日期区块 ──
     date_sections_html = ""
 
     if entries_by_date:
         for d, entries in sorted(entries_by_date.items(), reverse=True):
+            label_zh = i18n_date_label(d, "zh")
+            label_en = i18n_date_label(d, "en")
             items_html = ""
             for e in entries:
-                items_html += (
-                    f'<li class="news-item">'
+                badge = (
                     f'<span class="source-badge" style="background:{e["source_color"]};" '
                     f'title="{html_module.escape(e["source_name"])}">'
                     f'{html_module.escape(e["source_name"])}</span>'
+                )
+                link = (
                     f'<a href="{html_module.escape(e["link"])}" '
                     f'target="_blank" rel="noopener noreferrer">'
-                    f'{html_module.escape(e["title"])}</a>'
-                    f"</li>\n"
+                    f'{html_module.escape(e["title"])}'
+                    f'<span class="news-link-icon">↗</span></a>'
                 )
+                items_html += f'<li class="news-item">{badge}{link}</li>\n'
+
             date_sections_html += (
                 f'<section class="date-section">\n'
-                f'<h2>{date_label(d)}</h2>\n'
-                f'<ul class="news-list">\n'
-                f'{items_html}'
-                f'</ul>\n'
+                f'<h2><span class="dot"></span>'
+                f'<span data-lang="zh">{label_zh}</span>'
+                f'<span data-lang="en">{label_en}</span>'
+                f'</h2>\n'
+                f'<ul class="news-list">\n{items_html}</ul>\n'
                 f'</section>\n'
             )
     else:
         date_sections_html = (
             '<div class="empty-state">\n'
             '<div class="icon">📭</div>\n'
-            "<p>暂无新闻数据</p>\n"
-            "<p style=\"font-size:0.9em;margin-top:8px;\">请稍后再来，或手动触发更新。</p>\n"
-            "</div>\n"
+            f'<p data-lang="zh">{html_module.escape(I18N["zh"]["empty_title"])}</p>\n'
+            f'<p data-lang="en">{html_module.escape(I18N["en"]["empty_title"])}</p>\n'
+            f'<p data-lang="zh" style="font-size:.88em;margin-top:6px;">{html_module.escape(I18N["zh"]["empty_hint"])}</p>\n'
+            f'<p data-lang="en" style="font-size:.88em;margin-top:6px;">{html_module.escape(I18N["en"]["empty_hint"])}</p>\n'
+            '</div>\n'
         )
 
-    # 统计
-    total_articles = sum(len(v) for v in entries_by_date.values())
-    source_count = len(RSS_SOURCES)
-    success_count = source_count - len(errors)
-
-    # 错误信息
+    # ── 错误信息 ──
     errors_html = ""
     if errors:
         for src_name, err_msg in errors:
             errors_html += (
                 f'<p class="error-item">'
                 f'⚠️ {html_module.escape(src_name)}: {html_module.escape(err_msg)}'
-                f"</p>\n"
+                f'</p>\n'
             )
 
-    # 生成完整页面
+    repo = _repo_placeholder()
+    repo_link = f'https://github.com/{repo}' if repo else "#"
+    sources_str = ", ".join(html_module.escape(s["name"]) for s in RSS_SOURCES)
+
+    # ── 组装页面 ──
     html_content = f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="AI 发展日报 — 每日自动聚合 AI 领域最新资讯">
+<meta name="description" content="AI 发展日报 — 每日自动聚合 AI 领域最新资讯 | AI Daily — Automated AI news aggregation">
 <meta name="color-scheme" content="light">
-<title>🧠 AI 发展日报</title>
+<title>🧠 AI 发展日报 / AI Daily</title>
 <style>{CSS}</style>
 </head>
 <body>
 
 <header>
-    <h1>🧠 AI 发展日报</h1>
-    <p>每日自动聚合 AI 领域最新资讯 · 北京时间 8:00 更新</p>
+    <div class="lang-switch">
+        <button data-lang="zh">中文</button>
+        <button data-lang="en">English</button>
+    </div>
+    <h1 data-lang="zh">🧠 AI 发展日报</h1>
+    <h1 data-lang="en">🧠 AI Daily</h1>
+    <p data-lang="zh">{html_module.escape(I18N["zh"]["site_desc"])}</p>
+    <p data-lang="en">{html_module.escape(I18N["en"]["site_desc"])}</p>
 </header>
 
 <div class="stats-bar">
-    <span>📰 <span class="stat-num">{total_articles}</span> 条新闻</span>
-    <span>📡 <span class="stat-num">{success_count}/{source_count}</span> 源正常</span>
-    <span>📆 保留最近 <span class="stat-num">{MAX_DAYS}</span> 天</span>
+    <span>
+        <span class="stat-icon">📰</span>
+        <span class="stat-num">{total_articles}</span>
+        <span data-lang="zh">{I18N["zh"]["stats_articles"]}</span>
+        <span data-lang="en">{I18N["en"]["stats_articles"]}</span>
+    </span>
+    <span>
+        <span class="stat-icon">📡</span>
+        <span class="stat-num">{success_count}/{source_count}</span>
+        <span data-lang="zh">{I18N["zh"]["stats_sources"]}</span>
+        <span data-lang="en">{I18N["en"]["stats_sources"]}</span>
+    </span>
+    <span>
+        <span class="stat-icon">📆</span>
+        <span data-lang="zh">{I18N["zh"]["stats_days_prefix"]}</span>
+        <span data-lang="en">{I18N["en"]["stats_days_prefix"]}</span>
+        &nbsp;<span class="stat-num">{MAX_DAYS}</span>&nbsp;
+        <span data-lang="zh">{I18N["zh"]["stats_days_suffix"]}</span>
+        <span data-lang="en">{I18N["en"]["stats_days_suffix"]}</span>
+    </span>
 </div>
 
 <main>
@@ -570,16 +583,23 @@ def generate_html(entries_by_date, update_time, errors):
 </main>
 
 <footer>
-    <p>🕐 最后更新：{html_module.escape(update_time)}（北京时间）</p>
-    <p>数据来源：{", ".join(html_module.escape(s["name"]) for s in RSS_SOURCES)}</p>
+    <p>
+        🕐 <span data-lang="zh">{I18N["zh"]["footer_update"]}：{html_module.escape(update_time)}（{I18N["zh"]["footer_timezone"]}）</span>
+        <span data-lang="en">{I18N["en"]["footer_update"]}: {html_module.escape(update_time)} ({I18N["en"]["footer_timezone"]})</span>
+    </p>
+    <p>
+        <span data-lang="zh">{I18N["zh"]["footer_sources"]}：{sources_str}</span>
+        <span data-lang="en">{I18N["en"]["footer_sources"]}: {sources_str}</span>
+    </p>
 {errors_html}
-    <p style="margin-top:8px;">
-        Powered by
-        <a href="https://github.com/{_repo_placeholder()}" target="_blank" rel="noopener">GitHub Actions</a>
-        · 自动更新 · RSS 聚合
+    <p style="margin-top:6px;">
+        <span data-lang="zh">{I18N["zh"]["footer_powered"]}</span>
+        <span data-lang="en">{I18N["en"]["footer_powered"]}</span>
+        · <a href="{repo_link}" target="_blank" rel="noopener">GitHub</a>
     </p>
 </footer>
 
+{JS}
 </body>
 </html>"""
 
