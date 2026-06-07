@@ -27,8 +27,7 @@ CST = timezone(timedelta(hours=8))
 MAX_DAYS = 7
 REQUEST_TIMEOUT = 10
 OUTPUT_FILE = "index.html"
-TRANSLATE_BATCH_DELAY = 1.5  # 每批翻译间隔秒数，避免被限流
-TRANSLATE_MAX_WORKERS = 3    # 翻译并发数
+TRANSLATE_DELAY = 0.15      # 每条翻译间隔秒数
 
 RSS_SOURCES = [
     {"name": "OpenAI",      "url": "https://openai.com/blog/rss.xml",                    "color": "#10a37f"},
@@ -64,17 +63,26 @@ def _has_cjk(text):
 
 def translate_text(text, target_lang):
     """
-    翻译单段文本。失败时返回原文。
+    使用 MyMemory 免费 API 翻译。失败时返回原文。
     target_lang: 'zh' 或 'en'
     """
     if not text or not text.strip():
         return text
     try:
-        from deep_translator import GoogleTranslator
-        src = "auto"
-        result = GoogleTranslator(source=src, target="zh-CN" if target_lang == "zh" else "en").translate(text)
-        if result and result.strip():
-            return result.strip()
+        src_lang = "zh-CN" if _has_cjk(text) else "en"
+        target = "zh-CN" if target_lang == "zh" else "en"
+        # 如果源和目标相同，不需要翻译
+        if (src_lang == "zh-CN" and target == "zh-CN") or (src_lang == "en" and target == "en"):
+            return text
+
+        pair = f"{src_lang}|{target}"
+        url = "https://api.mymemory.translated.net/get"
+        resp = requests.get(url, params={"q": text, "langpair": pair}, timeout=15)
+        data = resp.json()
+        if data.get("responseStatus") == 200:
+            result = data.get("responseData", {}).get("translatedText", "")
+            if result and result.strip():
+                return html_module.unescape(result.strip())
     except Exception:
         pass
     return text
@@ -244,11 +252,6 @@ def fetch_feed(source):
                     raw = val[0].get("value", "") if isinstance(val, list) else str(val)
                     raw = re.sub(r"<[^>]+>", "", raw)
                     raw = html_module.unescape(raw).strip()
-                    if len(raw) > 250:
-                        cut = raw.rfind("。", 0, 250)
-                        if cut < 80: cut = raw.rfind(". ", 0, 250)
-                        if cut < 80: cut = raw.rfind(" ", 0, 250)
-                        raw = raw[:cut+1] + "…" if cut > 50 else raw[:250] + "…"
                     summary = raw
                     break
 
@@ -386,39 +389,50 @@ aside.tl a.on .tl-lbl{opacity:1}
     font-size:.7em;font-weight:600;color:#fff;line-height:1.7;white-space:nowrap;
     letter-spacing:.01em;margin-top:10px;
 }
-.ni dt{flex:1;min-width:0}
-.ni dt summary{
-    list-style:none;cursor:pointer;padding:10px 12px;border-radius:var(--rh);
+.ni .nt{
+    flex:1;min-width:0;padding:10px 12px;cursor:pointer;
     font-size:.95em;font-weight:510;color:var(--tx);
-    transition:color .15s;display:flex;align-items:center;justify-content:space-between;gap:8px;
+    transition:color .15s;border-radius:var(--rh);
 }
-.ni dt summary::-webkit-details-marker{display:none}
-.ni dt summary::marker{display:none;content:''}
-.ni dt summary:hover{color:var(--g)}
-.ni dt summary .arr{flex-shrink:0;font-size:.6em;color:var(--t3);transition:transform .25s}
-.ni dt[open] summary{color:var(--gd);font-weight:600}
-.ni dt[open] summary .arr{transform:rotate(180deg)}
-.ni dt .nc{padding:4px 12px 16px;font-size:.88em;color:var(--t2);line-height:1.72;animation:fi .25s}
-.ni dt .nc p{margin-bottom:12px}
-.ni dt .nc .rm{
-    display:inline-flex;align-items:center;gap:6px;color:var(--g);text-decoration:none;
-    font-weight:600;font-size:.9em;padding:6px 16px;border-radius:20px;
-    background:var(--glg);transition:all .15s;
-}
-.ni dt .nc .rm:hover{background:var(--gll);color:var(--gd)}
-.ni dt .nc .rm::after{content:"→";transition:transform .2s}
-.ni dt .nc .rm:hover::after{transform:translateX(3px)}
-.np{padding:4px 12px 16px;font-size:.85em}
-.np .rm{
-    display:inline-flex;align-items:center;gap:6px;color:var(--g);text-decoration:none;
-    font-weight:600;font-size:.9em;padding:6px 16px;border-radius:20px;
-    background:var(--glg);transition:all .15s;
-}
-.np .rm:hover{background:var(--gll);color:var(--gd)}
-.np .rm::after{content:"→";transition:transform .2s}
-.np .rm:hover::after{transform:translateX(3px)}
+.ni .nt:hover{color:var(--g)}
 
-@keyframes fi{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+/* ── Modal ── */
+.modal-overlay{
+    position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.32);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    display:flex;align-items:center;justify-content:center;padding:24px;
+    animation:mo .2s ease;
+}
+.modal-overlay.hidden{display:none}
+.modal{
+    background:#fff;border-radius:20px;max-width:660px;width:100%;max-height:85vh;
+    overflow-y:auto;box-shadow:0 25px 80px rgba(0,0,0,.15);
+    animation:ms .3s ease;
+}
+.modal-header{
+    padding:32px 32px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+}
+.modal-header h3{font-size:1.3em;font-weight:700;color:var(--tx);line-height:1.4;flex:1}
+.modal-close{
+    flex-shrink:0;width:32px;height:32px;border-radius:50%;border:none;
+    background:var(--bg2);color:var(--t3);font-size:1.2em;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.modal-close:hover{background:#e5e7eb;color:var(--tx)}
+.modal-body{padding:24px 32px 32px}
+.modal-body .m-src{display:inline-block;padding:3px 12px;border-radius:5px;
+    font-size:.75em;font-weight:600;color:#fff;margin-bottom:20px}
+.modal-body .m-sum{font-size:.95em;color:var(--t2);line-height:1.8;white-space:pre-wrap}
+.modal-body .m-link{
+    display:inline-flex;align-items:center;gap:8px;margin-top:24px;
+    color:var(--g);text-decoration:none;font-weight:600;font-size:.95em;
+    padding:10px 22px;border-radius:24px;background:var(--glg);transition:all .15s;
+}
+.modal-body .m-link:hover{background:var(--gll);color:var(--gd)}
+.modal-body .m-link::after{content:"→";transition:transform .2s}
+.modal-body .m-link:hover::after{transform:translateX(3px)}
+@keyframes mo{from{opacity:0}to{opacity:1}}
+@keyframes ms{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 
 /* ── Empty ── */
 .empty{text-align:center;padding:100px 24px;color:var(--t3)}
@@ -460,20 +474,20 @@ html.lang-en [data-lang="en"]{display:revert}
 JS = r"""
 <script>
 (function(){
-    // Lang
-    var L=localStorage.getItem('ai-news-lang')||'zh';
     var H=document.documentElement;
-    H.className='lang-'+L;
     var btns=document.querySelectorAll('.lang-sw button');
-    function sl(l){
+
+    // ── Lang ──
+    var L=localStorage.getItem('ai-news-lang')||'zh';
+    function setLang(l){
         H.className='lang-'+l;
         localStorage.setItem('ai-news-lang',l);
         btns.forEach(function(b){b.classList.toggle('on',b.dataset.lang===l)});
     }
-    btns.forEach(function(b){b.addEventListener('click',function(){sl(this.dataset.lang)})});
-    sl(L);
+    btns.forEach(function(b){b.addEventListener('click',function(){setLang(this.dataset.lang)})});
+    setLang(L);
 
-    // Timeline
+    // ── Timeline ──
     var links=document.querySelectorAll('.tl a');
     if(links.length){
         var sec=[];
@@ -482,15 +496,69 @@ JS = r"""
             if(el) sec.push({el:el,a:a});
         });
         function up(){
-            var sy=window.scrollY+100;
-            var ac=null;
+            var sy=window.scrollY+100,ac=null;
             sec.forEach(function(s){if(s.el.offsetTop<=sy) ac=s.a;});
             links.forEach(function(a){a.classList.remove('on')});
             if(ac) ac.classList.add('on');
         }
-        window.addEventListener('scroll',up,{passive:true});
-        up();
+        window.addEventListener('scroll',up,{passive:true});up();
     }
+
+    // ── Modal ──
+    var overlay=document.getElementById('modal-overlay');
+    var mTitle=document.getElementById('modal-title-zh');
+    var mTitleEn=document.getElementById('modal-title-en');
+    var mSrc=document.getElementById('modal-src');
+    var mSumZh=document.getElementById('modal-summary-zh');
+    var mSumEn=document.getElementById('modal-summary-en');
+    var mLink=document.getElementById('modal-link');
+    var mRmZh=document.getElementById('modal-rm-zh');
+    var mRmEn=document.getElementById('modal-rm-en');
+
+    function openModal(data){
+        mTitle.textContent=data.zh_title||'';
+        mTitleEn.textContent=data.en_title||'';
+        mSrc.textContent=data.source||'';
+        mSrc.style.background=data.color||'#999';
+        mSumZh.textContent=data.zh_summary||'';
+        mSumEn.textContent=data.en_summary||'';
+        mLink.href=data.link||'#';
+        // Show/hide summary sections
+        if(data.zh_summary||data.en_summary){
+            mSumZh.style.display='';mSumEn.style.display='';
+        }else{
+            mSumZh.style.display='none';mSumEn.style.display='none';
+        }
+        // Show/hide read-more
+        if(data.link&&data.link!=='#'){
+            mRmZh.style.display='';mRmEn.style.display='';
+        }else{
+            mRmZh.style.display='none';mRmEn.style.display='none';
+        }
+        overlay.classList.remove('hidden');
+        document.body.style.overflow='hidden';
+    }
+    window.closeModal=function(){
+        overlay.classList.add('hidden');
+        document.body.style.overflow='';
+    };
+    overlay.addEventListener('click',function(e){if(e.target===overlay)closeModal();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+
+    // Attach to news items
+    document.querySelectorAll('.ni .nt').forEach(function(el){
+        el.addEventListener('click',function(){
+            openModal({
+                zh_title:el.getAttribute('data-zh-title')||'',
+                en_title:el.getAttribute('data-en-title')||'',
+                zh_summary:el.getAttribute('data-zh-summary')||'',
+                en_summary:el.getAttribute('data-en-summary')||'',
+                source:el.getAttribute('data-source')||'',
+                color:el.getAttribute('data-color')||'#999',
+                link:el.getAttribute('data-link')||'#'
+            });
+        });
+    });
 })();
 </script>
 """
@@ -576,35 +644,22 @@ def generate_html(entries_by_date, update_time, errors):
                 zh_sum = html_module.escape(e.get("zh_summary") or e.get("summary", ""))
                 en_sum = html_module.escape(e.get("en_summary") or e.get("summary", ""))
                 link = html_module.escape(e.get("link", "#"))
-
-                rm_zh = I18N["zh"]["read_more"]
-                rm_en = I18N["en"]["read_more"]
-
-                if e.get("summary") or e.get("zh_summary") or e.get("en_summary"):
-                    body = (
-                        f'<div class="nc">'
-                        f'<p data-lang="zh">{zh_sum}</p>'
-                        f'<p data-lang="en">{en_sum}</p>'
-                        f'<a href="{link}" target="_blank" rel="noopener" class="rm">'
-                        f'<span data-lang="zh">{rm_zh}</span>'
-                        f'<span data-lang="en">{rm_en}</span></a>'
-                        f'</div>'
-                    )
-                else:
-                    body = (
-                        f'<div class="np">'
-                        f'<a href="{link}" target="_blank" rel="noopener" class="rm">'
-                        f'<span data-lang="zh">{rm_zh}</span>'
-                        f'<span data-lang="en">{rm_en}</span></a>'
-                        f'</div>'
-                    )
+                color = html_module.escape(e.get("source_color", "#999"))
+                src_name = html_module.escape(e.get("source_name", ""))
 
                 items += (
                     f'<li class="ni">{badge}'
-                    f'<dt class="nd"><summary>'
+                    f'<div class="nt"'
+                    f' data-zh-title="{zh_title}"'
+                    f' data-en-title="{en_title}"'
+                    f' data-zh-summary="{zh_sum}"'
+                    f' data-en-summary="{en_sum}"'
+                    f' data-source="{src_name}"'
+                    f' data-color="{color}"'
+                    f' data-link="{link}">'
                     f'<span data-lang="zh">{zh_title}</span>'
                     f'<span data-lang="en">{en_title}</span>'
-                    f'<span class="arr">▾</span></summary>{body}</dt></li>\n'
+                    f'</div></li>\n'
                 )
 
             ds_html += (
@@ -679,6 +734,26 @@ def generate_html(entries_by_date, update_time, errors):
 {err_html}
 <p style="margin-top:8px"><span data-lang="zh">{I18N["zh"]["powered"]}</span><span data-lang="en">{I18N["en"]["powered"]}</span> · <a href="{gl}">GitHub</a></p>
 </footer>
+
+<!-- Modal -->
+<div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+<div class="modal">
+<div class="modal-header">
+<h3 id="modal-title-zh" data-lang="zh"></h3>
+<h3 id="modal-title-en" data-lang="en"></h3>
+<button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+</div>
+<div class="modal-body">
+<span id="modal-src" class="m-src"></span>
+<p id="modal-summary-zh" class="m-sum" data-lang="zh"></p>
+<p id="modal-summary-en" class="m-sum" data-lang="en"></p>
+<a id="modal-link" class="m-link" href="#" target="_blank" rel="noopener">
+<span id="modal-rm-zh" data-lang="zh">阅读原文</span>
+<span id="modal-rm-en" data-lang="en">Read more</span>
+</a>
+</div>
+</div>
+</div>
 
 {JS}
 </body>
