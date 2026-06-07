@@ -365,7 +365,7 @@ document.querySelectorAll('.ntc').forEach(function(el){
 # ═══ HTML ═══
 def gen_html(ebd, ut, errors):
     total=sum(len(v) for v in ebd.values())
-    sc,ok=len(RSS),sc-len(errors)
+    sc=len(RSS); ok=sc-len(errors)
     tl=""; ds=""
 
     if ebd:
