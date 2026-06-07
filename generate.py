@@ -56,10 +56,18 @@ RSS_SOURCES = [
         "color": "#4285f4",
     },
     {
-        "name": "AI News",
-        "name_zh": "AI News",
-        "url": "https://www.artificialintelligence-news.com/feed/",
-        "color": "#0077b6",
+        "name": "IT之家",
+        "name_zh": "IT之家 · AI",
+        "url": "https://www.ithome.com/rss/",
+        "color": "#d50000",
+        # IT之家是综合科技媒体，需要 AI 关键词过滤
+        "keywords": [
+            "AI", "人工智能", "大模型", "GPT", "LLM", "智能", "机器人",
+            "算力", "芯片", "NVIDIA", "英伟达", "OpenAI", "ChatGPT",
+            "机器学习", "深度学习", "自动驾驶", "Agent", "智谱",
+            "模型", "算法", "数据中心", "神经网络", "GPU",
+            "Copilot", "Gemini", "Claude", "DeepSeek", "深度求索",
+        ],
     },
     {
         "name": "TechCrunch AI",
