@@ -12,25 +12,26 @@ CST = timezone(timedelta(hours=8))
 MAX_DAYS, REQUEST_TIMEOUT, OUTPUT = 7, 10, "index.html"
 
 RSS = [
-    {"name":"OpenAI","url":"https://openai.com/blog/rss.xml","color":"#10a37f"},
-    {"name":"Hugging Face","url":"https://huggingface.co/blog/feed.xml","color":"#ff9d00"},
-    {"name":"Google AI","url":"https://blog.google/technology/ai/rss/","color":"#4285f4"},
-    {"name":"BBC Tech","url":"https://feeds.bbci.co.uk/news/technology/rss.xml","color":"#b80000",
-     "keywords":["AI","artificial intelligence","ChatGPT","OpenAI","Google","DeepMind","robot",
-                  "machine learning","LLM","GPT","Copilot","Gemini","Claude","NVIDIA","chip",
-                  "autonomous","data center","neural network","deep learning","agent"]},
-    {"name":"Ars Technica","url":"https://feeds.arstechnica.com/arstechnica/index","color":"#ff4e00",
-     "keywords":["AI","artificial intelligence","ChatGPT","OpenAI","Google","DeepMind","robot",
-                  "machine learning","LLM","GPT","Copilot","Gemini","Claude","NVIDIA","chip",
-                  "autonomous","neural","deep learning","agent","Copilot"]},
-    {"name":"MIT Tech Review","url":"https://www.technologyreview.com/feed/","color":"#d32f2f",
-     "keywords":["AI","artificial intelligence","ChatGPT","OpenAI","Google","DeepMind","robot",
-                  "machine learning","LLM","GPT","neural","deep learning","data","algorithm"]},
-    {"name":"TechCrunch","url":"https://techcrunch.com/category/artificial-intelligence/feed/","color":"#0a960a"},
-    {"name":"ArXiv AI","url":"https://export.arxiv.org/rss/cs.AI","color":"#b31b1b"},
+    # ── 中文 AI 源 (目标 ~70%) ──
     {"name":"36氪","url":"https://36kr.com/feed","color":"#3370ff",
      "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","算力","芯片","NVIDIA",
-                  "英伟达","OpenAI","ChatGPT","机器学习","深度学习","自动驾驶","Agent","Token","数字人"]},
+                  "英伟达","OpenAI","ChatGPT","机器学习","深度学习","自动驾驶","Agent","Token","数字人",
+                  "Claude","Anthropic","Copilot","Gemini","DeepMind","人形机器人","具身智能"]},
+    {"name":"机器之心","url":"https://jiqizhixin.com/rss","color":"#E60012",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","机器学习","深度学习","NVIDIA",
+                  "OpenAI","ChatGPT","智能","机器人","芯片","Agent","Claude"]},
+    {"name":"量子位","url":"https://www.qbitai.com/feed","color":"#FF6B35"},
+    {"name":"虎嗅","url":"https://www.huxiu.com/rss/0.xml","color":"#D4A843",
+     "keywords":["AI","人工智能","大模型","ChatGPT","OpenAI","GPT","NVIDIA","英伟达",
+                  "智能","机器人","芯片","Agent","Claude","DeepMind","机器学习","自动驾驶"]},
+    {"name":"雷锋网","url":"https://www.leiphone.com/feed","color":"#C41230",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片","NVIDIA",
+                  "OpenAI","ChatGPT","机器学习","自动驾驶","Agent"]},
+    # ── 英文 AI 源 (目标 ~30%) ──
+    {"name":"OpenAI","url":"https://openai.com/blog/rss.xml","color":"#10a37f"},
+    {"name":"Google AI","url":"https://blog.google/technology/ai/rss/","color":"#4285f4"},
+    {"name":"ArXiv AI","url":"https://export.arxiv.org/rss/cs.AI","color":"#b31b1b"},
+    {"name":"TechCrunch AI","url":"https://techcrunch.com/category/artificial-intelligence/feed/","color":"#0a960a"},
 ]
 
 # ═══ RSS 抓取 ═══
@@ -126,170 +127,205 @@ CSS=r"""
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
 :root{
-    --g:#059669;--gd:#047857;--gl:#34d399;--gll:#d1fae5;--glg:#ecfdf5;
-    --tx:#0f172a;--t2:#475569;--t3:#94a3b8;
-    --bg:#fff;--bg2:#f8fafc;--br:#e2e8f0;
+    --accent:#007AFF;--ad:#0056CC;--al:#E8F2FF;
+    --tx:#1D1D1F;--t2:#6E6E73;--t3:#AEAEB2;
+    --bg:#FFFFFF;--bg2:#F5F5F7;--br:#E5E5EA;
+    --sh-sm:0 1px 3px rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.06);
+    --sh-md:0 4px 16px rgba(0,0,0,.06),0 2px 6px rgba(0,0,0,.04);
+    --sh-lg:0 12px 40px rgba(0,0,0,.1),0 4px 12px rgba(0,0,0,.06);
 }
 body{
     font-family:"SF Pro Display",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-    background:var(--bg);color:var(--tx);line-height:1.6;min-height:100vh;
-    display:flex;flex-direction:column;font-weight:420;
+    background:var(--bg);color:var(--tx);line-height:1.5;min-height:100vh;
+    display:flex;flex-direction:column;font-weight:400;
 }
 
-/* ── Header ── */
+/* ── Nav (Fixed Glass) ── */
+nav#topnav{
+    position:fixed;top:0;left:0;right:0;z-index:100;height:52px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 28px;
+    background:rgba(255,255,255,.72);
+    backdrop-filter:blur(20px) saturate(180%);
+    -webkit-backdrop-filter:blur(20px) saturate(180%);
+    border-bottom:1px solid rgba(0,0,0,.06);
+    transition:background .3s ease,border-color .3s ease;
+}
+nav#topnav.scrolled{background:rgba(255,255,255,.88);border-bottom-color:rgba(0,0,0,.1)}
+nav#topnav .logo{
+    font-size:.88em;font-weight:700;color:var(--tx);
+    letter-spacing:-.01em;white-space:nowrap;
+}
+nav#topnav .ls{
+    display:inline-flex;gap:1px;background:rgba(0,0,0,.04);border-radius:20px;padding:2px;
+}
+nav#topnav .ls button{
+    border:none;background:transparent;color:var(--t2);
+    padding:5px 15px;border-radius:18px;cursor:pointer;font-size:.75em;
+    font-weight:550;transition:all .25s;font-family:inherit;letter-spacing:.01em;
+}
+nav#topnav .ls button.on{background:#fff;color:var(--tx);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+nav#topnav .ls button:hover:not(.on){color:var(--tx);background:rgba(0,0,0,.05)}
+
+/* ── Header Hero ── */
 header{
-    position:relative;padding:80px 24px 56px;text-align:center;
-    background:linear-gradient(170deg,#022c22 0%,#064e3b 30%,#065f46 60%,#047857 100%);
-    color:#fff;overflow:hidden;
+    padding:140px 24px 64px;text-align:center;position:relative;
+    background:var(--bg);overflow:hidden;
 }
 header::before{
-    content:"";position:absolute;inset:0;
-    background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(52,211,153,.12) 0%,transparent 60%),
-              radial-gradient(ellipse 40% 50% at 20% 100%,rgba(5,150,105,.15) 0%,transparent 50%),
-              radial-gradient(ellipse 30% 40% at 80% 80%,rgba(16,185,129,.1) 0%,transparent 50%);
-    pointer-events:none
+    content:"";position:absolute;top:-50%;left:-50%;width:200%;height:200%;
+    background:radial-gradient(ellipse 60% 50% at 50% 40%,rgba(0,122,255,.04) 0%,transparent 60%),
+              radial-gradient(ellipse 40% 40% at 30% 60%,rgba(88,86,214,.03) 0%,transparent 50%),
+              radial-gradient(ellipse 30% 30% at 70% 50%,rgba(175,82,222,.03) 0%,transparent 50%);
+    pointer-events:none;
 }
-header .topbar{
-    display:flex;justify-content:flex-end;max-width:760px;margin:0 auto 28px;position:relative;z-index:1
-}
-header .ls{
-    display:inline-flex;gap:0;background:rgba(255,255,255,.1);border-radius:24px;
-    padding:3px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-    border:1px solid rgba(255,255,255,.12)
-}
-header .ls button{
-    border:none;background:transparent;color:rgba(255,255,255,.65);
-    padding:7px 18px;border-radius:22px;cursor:pointer;font-size:.8em;
-    font-weight:550;transition:all .25s;font-family:inherit;letter-spacing:.01em
-}
-header .ls button.on{background:#fff;color:#047857;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-header .ls button:hover:not(.on){color:#fff;background:rgba(255,255,255,.08)}
-header h1{font-size:2.8em;font-weight:800;letter-spacing:-.025em;position:relative;z-index:1;line-height:1.2}
+header h1{font-size:clamp(2.6em,5vw,3.6em);font-weight:700;letter-spacing:-.035em;line-height:1.12;position:relative}
 header h1 .grad{
-    background:linear-gradient(135deg,#fff 0%,#a7f3d0 50%,#6ee7b7 100%);
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    background:linear-gradient(135deg,#007AFF 0%,#5856D6 45%,#AF52DE 100%);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
-header .sub{margin-top:12px;font-size:1em;opacity:.55;font-weight:400;position:relative;z-index:1}
+header .sub{font-size:1.15em;color:var(--t2);font-weight:400;margin-top:14px;position:relative}
 
-/* ── Stats ── */
+/* ── Stats Bar ── */
 .stats{
     display:flex;justify-content:center;gap:56px;flex-wrap:wrap;
-    padding:18px 20px;background:var(--bg2);border-bottom:1px solid var(--br);
-    font-size:.84em;color:var(--t3);
+    padding:22px 20px;background:var(--bg2);border-top:1px solid var(--br);border-bottom:1px solid var(--br);
+    font-size:.8em;color:var(--t3);font-weight:450;
 }
-.stats .val{font-weight:700;color:var(--g);font-size:1.12em;font-variant-numeric:tabular-nums}
+.stats .val{font-weight:700;color:var(--accent);font-size:1.1em;font-variant-numeric:tabular-nums}
 
 /* ── Layout ── */
-.wrap{display:flex;max-width:1120px;width:100%;margin:0 auto;padding:0 20px;flex:1}
-main{flex:1;max-width:740px;width:100%;margin:0 auto;padding:44px 0 72px}
+.wrap{display:flex;max-width:1060px;width:100%;margin:0 auto;padding:0 28px;flex:1}
+main{flex:1;max-width:760px;width:100%;margin:0 auto;padding:56px 0 100px}
 
-/* ── Timeline ── */
-aside.tl{width:130px;flex-shrink:0;padding-top:48px}
-aside.tl nav{position:sticky;top:80px;padding-left:24px;border-left:2px solid var(--gll)}
+/* ── Timeline Sidebar (Notebook-style) ── */
+aside.tl{width:94px;flex-shrink:0;padding-top:60px}
+aside.tl nav{position:sticky;top:80px;padding-left:18px;border-left:1.5px solid var(--br)}
 aside.tl a{
-    display:flex;align-items:center;gap:10px;text-decoration:none;
-    color:var(--t3);font-size:.72em;font-weight:550;padding:7px 0;
-    position:relative;transition:color .2s
+    display:flex;align-items:center;gap:8px;text-decoration:none;
+    color:var(--t3);font-size:.7em;font-weight:550;padding:6px 0;
+    position:relative;transition:color .25s;
 }
 aside.tl a::before{
-    content:"";position:absolute;left:-30px;top:50%;transform:translateY(-50%);
-    width:10px;height:10px;border-radius:50%;background:var(--bg);
-    border:2px solid var(--gll);transition:all .3s cubic-bezier(.4,0,.2,1)
+    content:"";position:absolute;left:-22px;top:50%;transform:translateY(-50%);
+    width:8px;height:8px;border-radius:50%;background:var(--bg);
+    border:1.5px solid var(--br);transition:all .35s cubic-bezier(.25,.1,.25,1);
 }
-aside.tl a:hover{color:var(--g)}
-aside.tl a:hover::before{border-color:var(--gl);background:var(--gll);box-shadow:0 0 0 6px var(--gll)}
-aside.tl a.on{color:var(--g);font-weight:700}
+aside.tl a:hover{color:var(--accent)}
+aside.tl a:hover::before{border-color:var(--accent);background:var(--al);box-shadow:0 0 0 5px var(--al)}
+aside.tl a.on{color:var(--accent);font-weight:700}
 aside.tl a.on::before{
-    background:var(--g);border-color:var(--g);
-    box-shadow:0 0 0 6px var(--gll);width:12px;height:12px;left:-31px
+    background:var(--accent);border-color:var(--accent);
+    box-shadow:0 0 0 5px var(--al);width:10px;height:10px;left:-23px;
 }
 aside.tl a .tl-lbl{opacity:0;transition:opacity .25s;font-variant-numeric:tabular-nums}
 aside.tl a:hover .tl-lbl,aside.tl a.on .tl-lbl{opacity:1}
 
-/* ── Date section ── */
-.ds{margin-bottom:56px;scroll-margin-top:60px}
+/* ── Date Section (Journal Entry) ── */
+.ds{scroll-margin-top:64px}
 .ds h2{
-    font-size:.95em;font-weight:650;color:var(--t2);padding-bottom:14px;
-    border-bottom:1px solid var(--br);margin-bottom:6px;position:sticky;
-    top:0;background:var(--bg);z-index:2;display:flex;align-items:center;gap:10px;
+    font-size:1.05em;font-weight:700;color:var(--tx);padding-bottom:16px;
+    border-bottom:1px solid var(--br);margin-bottom:8px;
+    position:sticky;top:52px;background:var(--bg);z-index:2;
+    display:flex;align-items:center;gap:10px;
 }
-.ds h2 .d-dot{width:7px;height:7px;border-radius:50%;background:var(--gl);flex-shrink:0}
+.ds h2 .d-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
 
-/* ── News items ── */
-.news-list{list-style:none}
+/* ── News Card ── */
+.news-list{list-style:none;padding-top:8px}
 .ni{
-    display:flex;align-items:flex-start;gap:12px;border-radius:10px;
-    transition:background .15s,transform .15s;margin-bottom:0;
+    display:flex;align-items:flex-start;gap:14px;border-radius:14px;
+    padding:18px 22px;margin-bottom:6px;
+    background:var(--bg);
+    box-shadow:none;
+    transition:all .35s cubic-bezier(.25,.1,.25,1);
+    border:1px solid transparent;
+    position:relative;
 }
-.ni:hover{background:var(--glg);transform:translateX(2px)}
+.ni:hover{
+    background:var(--bg);
+    box-shadow:var(--sh-md);
+    transform:translateY(-2px);
+    border-color:rgba(0,0,0,.06);
+}
 .ni .src{
-    flex-shrink:0;padding:3px 10px;border-radius:5px;
-    font-size:.68em;font-weight:650;color:#fff;line-height:1.7;
-    white-space:nowrap;letter-spacing:.02em;margin-top:11px;
+    flex-shrink:0;padding:3px 10px;border-radius:6px;
+    font-size:.65em;font-weight:650;color:#fff;line-height:1.6;
+    white-space:nowrap;letter-spacing:.03em;margin-top:1px;
 }
 .ni .ntc{
-    flex:1;min-width:0;padding:11px 14px;cursor:pointer;
-    font-size:.95em;font-weight:480;color:var(--tx);
-    transition:color .15s;border-radius:10px;
+    flex:1;min-width:0;padding:0;cursor:pointer;
+    font-size:.95em;font-weight:450;color:var(--tx);line-height:1.55;
+    transition:color .2s;
 }
-.ni:hover .ntc{color:var(--g)}
-.ni .ntc::after{content:"›";float:right;font-size:1.2em;color:var(--t3);font-weight:300;
-    transition:transform .2s,color .2s;margin-left:8px;line-height:1.4}
-.ni:hover .ntc::after{color:var(--g);transform:translateX(3px)}
+.ni:hover .ntc{color:var(--accent)}
+.ni .ntc::after{content:"›";float:right;font-size:1.35em;color:var(--t3);font-weight:300;
+    transition:transform .3s cubic-bezier(.25,.1,.25,1),color .2s;margin-left:12px;line-height:1.3}
+.ni:hover .ntc::after{color:var(--accent);transform:translateX(3px)}
+
+/* ── Reveal Animation ── */
+.reveal{
+    opacity:0;filter:blur(6px);transform:translateY(20px);
+    transition:opacity .65s cubic-bezier(.25,.1,.25,1),
+               filter .65s cubic-bezier(.25,.1,.25,1),
+               transform .65s cubic-bezier(.25,.1,.25,1);
+}
+.reveal.visible{opacity:1;filter:blur(0);transform:translateY(0)}
 
 /* ── Modal ── */
 .mo{
-    position:fixed;inset:0;z-index:9999;background:rgba(2,44,34,.45);
-    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,.32);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
     display:flex;align-items:center;justify-content:center;padding:28px;
-    animation:moin .25s ease
+    animation:moin .25s ease;
 }
 .mo.hi{display:none}
 .md{
-    background:var(--bg);border-radius:24px;max-width:680px;width:100%;max-height:85vh;
-    overflow-y:auto;box-shadow:0 32px 100px rgba(0,0,0,.2),0 0 0 1px rgba(0,0,0,.04);
-    animation:mdin .35s cubic-bezier(.16,1,.3,1)
+    background:var(--bg);border-radius:22px;max-width:660px;width:100%;max-height:85vh;
+    overflow-y:auto;box-shadow:var(--sh-lg),0 0 0 1px rgba(0,0,0,.06);
+    animation:mdin .4s cubic-bezier(.16,1,.3,1);
 }
-.md-h{padding:36px 36px 0;display:flex;align-items:flex-start;gap:16px}
-.md-h h3{font-size:1.25em;font-weight:700;color:var(--tx);line-height:1.45;flex:1}
+.md-h{padding:34px 34px 0;display:flex;align-items:flex-start;gap:16px}
+.md-h h3{font-size:1.2em;font-weight:700;color:var(--tx);line-height:1.45;flex:1}
 .md-x{
-    flex-shrink:0;width:36px;height:36px;border-radius:50%;border:none;
-    background:var(--bg2);color:var(--t3);font-size:1.1em;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;transition:all .2s
+    flex-shrink:0;width:34px;height:34px;border-radius:50%;border:none;
+    background:var(--bg2);color:var(--t3);font-size:1em;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:all .25s;
 }
-.md-x:hover{background:#e2e8f0;color:var(--tx);transform:rotate(90deg)}
-.md-b{padding:20px 36px 40px}
+.md-x:hover{background:#E5E5EA;color:var(--tx);transform:rotate(90deg)}
+.md-b{padding:18px 34px 38px}
 .md-b .m-src{display:inline-block;padding:3px 14px;border-radius:6px;
-    font-size:.72em;font-weight:650;color:#fff;margin-bottom:22px;letter-spacing:.02em}
-.md-b .m-sum{font-size:.92em;color:var(--t2);line-height:1.85;white-space:pre-wrap}
+    font-size:.7em;font-weight:650;color:#fff;margin-bottom:20px;letter-spacing:.03em}
+.md-b .m-sum{font-size:.9em;color:var(--t2);line-height:1.8;white-space:pre-wrap}
 .md-b .rl{
-    display:inline-flex;align-items:center;gap:8px;margin-top:28px;
-    color:#fff;text-decoration:none;font-weight:600;font-size:.9em;
-    padding:11px 24px;border-radius:28px;background:var(--g);
-    transition:all .2s;box-shadow:0 4px 14px rgba(5,150,105,.3)
+    display:inline-flex;align-items:center;gap:8px;margin-top:26px;
+    color:#fff;text-decoration:none;font-weight:600;font-size:.88em;
+    padding:10px 22px;border-radius:22px;background:var(--accent);
+    transition:all .25s;box-shadow:0 2px 10px rgba(0,122,255,.3);
 }
-.md-b .rl:hover{background:var(--gd);box-shadow:0 6px 20px rgba(5,150,105,.4);transform:translateY(-1px)}
-.md-b .rl::after{content:"→";transition:transform .2s}
+.md-b .rl:hover{background:var(--ad);box-shadow:0 4px 16px rgba(0,122,255,.4);transform:translateY(-1px)}
+.md-b .rl::after{content:"→";transition:transform .25s}
 .md-b .rl:hover::after{transform:translateX(4px)}
 @keyframes moin{from{opacity:0}to{opacity:1}}
-@keyframes mdin{from{opacity:0;transform:translateY(24px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes mdin{from{opacity:0;transform:translateY(28px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
 
-/* ── Empty ── */
+/* ── Empty State ── */
 .empty{text-align:center;padding:120px 24px;color:var(--t3)}
 .empty .ic{font-size:3.5em;margin-bottom:18px}
 .empty p{font-size:1em}
 
 /* ── Footer ── */
 footer{
-    text-align:center;padding:32px 20px;font-size:.76em;color:var(--t3);
-    border-top:1px solid var(--br);margin-top:auto;background:var(--bg2)
+    text-align:center;padding:28px 20px;font-size:.74em;color:var(--t3);
+    border-top:1px solid var(--br);margin-top:auto;background:var(--bg2);
 }
-footer p+p{margin-top:5px}
-footer .er{color:#dc2626;font-size:.82em;margin-top:4px}
-footer a{color:var(--g);text-decoration:none;font-weight:550}
+footer p+p{margin-top:4px}
+footer .er{color:#DC2626;font-size:.8em;margin-top:4px}
+footer a{color:var(--accent);text-decoration:none;font-weight:550}
 footer a:hover{text-decoration:underline}
 
-/* ── Language visibility ── */
+/* ── Language Visibility ── */
 html.lang-zh .la-zh{display:revert}
 html.lang-zh .la-en{display:none!important}
 html.lang-en .la-en{display:revert}
@@ -298,19 +334,22 @@ html.lang-en .la-zh{display:none!important}
 /* ── Responsive ── */
 @media(max-width:920px){aside.tl{display:none}}
 @media(max-width:640px){
-    header{padding:56px 18px 40px}
-    header h1{font-size:1.9em}
-    header .ls button{padding:6px 14px;font-size:.76em}
-    .wrap{padding:0 14px}
-    main{padding:28px 0 44px}
-    .stats{gap:24px;font-size:.78em}
-    .ni .ntc{font-size:.9em;padding:10px 8px}
-    .ni .src{font-size:.63em;padding:2px 8px;margin-top:10px}
-    .ni{gap:6px}
-    .md{padding:0;border-radius:18px}
-    .md-h{padding:28px 24px 0}
-    .md-b{padding:16px 24px 32px}
-    .ds{margin-bottom:40px}
+    nav#topnav{padding:0 16px}
+    nav#topnav .logo{font-size:.82em}
+    nav#topnav .ls button{padding:4px 12px;font-size:.72em}
+    header{padding:100px 18px 44px}
+    header h1{font-size:2em}
+    header .sub{font-size:1em}
+    .wrap{padding:0 16px}
+    main{padding:32px 0 52px}
+    .stats{gap:20px;font-size:.74em;padding:16px 16px}
+    .ds h2{font-size:.95em}
+    .ni{padding:14px 16px;gap:10px;border-radius:12px}
+    .ni .ntc{font-size:.88em}
+    .ni .src{font-size:.6em;padding:2px 8px}
+    .md{border-radius:16px}
+    .md-h{padding:24px 20px 0}
+    .md-b{padding:14px 20px 28px}
 }
 """
 
@@ -328,6 +367,14 @@ function sl(l){
 btns.forEach(function(b){b.addEventListener('click',function(){sl(this.dataset.lang)})});
 sl(L);
 
+// Nav scroll state
+var nav=document.getElementById('topnav');
+function upNav(){
+    if(window.scrollY>10)nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+}
+window.addEventListener('scroll',upNav,{passive:true});upNav();
+
 // Timeline scroll-spy
 var tls=document.querySelectorAll('.tl a');
 if(tls.length){
@@ -337,13 +384,24 @@ if(tls.length){
         if(el)sec.push({el:el,a:a});
     });
     function up(){
-        var sy=window.scrollY+120,ac=null;
+        var sy=window.scrollY+160,ac=null;
         sec.forEach(function(s){if(s.el.offsetTop<=sy)ac=s.a;});
         tls.forEach(function(a){a.classList.remove('on')});
         if(ac)ac.classList.add('on');
     }
     window.addEventListener('scroll',up,{passive:true});up();
 }
+
+// Scroll-triggered reveal (blur-in)
+var observer=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+        if(e.isIntersecting){
+            e.target.classList.add('visible');
+            observer.unobserve(e.target);
+        }
+    });
+},{threshold:0.12,rootMargin:'0px 0px -30px 0px'});
+document.querySelectorAll('.reveal').forEach(function(el){observer.observe(el)});
 
 // Modal
 var ov=document.getElementById('mo');
@@ -394,7 +452,7 @@ def gen_html(ebd, ut, errors):
                 lk_=H.escape(e.get("link","#"))
                 co_=H.escape(e.get("source_color","#999"))
                 sn_=H.escape(e.get("source_name",""))
-                items+=(f'<li class="ni">{badge}'
+                items+=(f'<li class="ni reveal">{badge}'
                         f'<div class="ntc la-zh" data-zt="{zt}" data-et="{et}" '
                         f'data-zs="{zs}" data-es="{es_}" data-source="{sn_}" '
                         f'data-color="{co_}" data-link="{lk_}">{zt}</div>'
@@ -431,13 +489,17 @@ def gen_html(ebd, ut, errors):
 </head>
 <body>
 
-<header>
-<div class="topbar"><div class="ls">
+<nav id="topnav">
+<a href="#" class="logo" style="text-decoration:none"><span class="la-zh">🧠 AI 日报</span><span class="la-en">🧠 AI Daily</span></a>
+<div class="ls">
 <button data-lang="zh">中文</button>
 <button data-lang="en">English</button>
-</div></div>
-<h1><span class="la-zh">🧠 <span class="grad">AI 发展日报</span></span>
-<span class="la-en">🧠 <span class="grad">AI Daily</span></span></h1>
+</div>
+</nav>
+
+<header>
+<h1><span class="la-zh">全球<span class="grad"> AI 大事</span>精选</span>
+<span class="la-en"><span class="grad">AI Daily</span> Highlights</span></h1>
 <p class="sub la-zh">{H.escape(I18N["zh"]["sub"])}</p>
 <p class="sub la-en">{H.escape(I18N["en"]["sub"])}</p>
 </header>
