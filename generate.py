@@ -12,7 +12,7 @@ CST = timezone(timedelta(hours=8))
 MAX_DAYS, REQUEST_TIMEOUT, OUTPUT = 7, 10, "index.html"
 
 RSS = [
-    # ── 中文 AI 源 (目标 ~70%) ──
+    # ═══ 中文 AI 源 (目标 ~17 个) ═══
     {"name":"36氪","url":"https://36kr.com/feed","color":"#3370ff",
      "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","算力","芯片","NVIDIA",
                   "英伟达","OpenAI","ChatGPT","机器学习","深度学习","自动驾驶","Agent","Token","数字人",
@@ -27,11 +27,48 @@ RSS = [
     {"name":"雷锋网","url":"https://www.leiphone.com/feed","color":"#C41230",
      "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片","NVIDIA",
                   "OpenAI","ChatGPT","机器学习","自动驾驶","Agent"]},
-    # ── 英文 AI 源 (目标 ~30%) ──
+    {"name":"IT之家","url":"https://www.ithome.com/rss/","color":"#D50000",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片","NVIDIA",
+                  "OpenAI","ChatGPT","Copilot","Gemini","Claude","DeepMind","Agent","英伟达"]},
+    {"name":"极客公园","url":"https://www.geekpark.net/feed","color":"#00B96B",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","OpenAI",
+                  "ChatGPT","Agent","Claude","NVIDIA","自动驾驶","芯片"]},
+    {"name":"品玩","url":"https://www.pingwest.com/feed","color":"#FA541C",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","OpenAI","ChatGPT",
+                  "Agent","Claude","机器人","NVIDIA","芯片","自动驾驶"]},
+    {"name":"少数派","url":"https://sspai.com/feed","color":"#D91A1A",
+     "keywords":["AI","人工智能","大模型","GPT","ChatGPT","OpenAI","智能",
+                  "机器学习","LLM","Agent","Claude","NVIDIA","机器人"]},
+    {"name":"钛媒体","url":"https://www.tmtpost.com/rss.xml","color":"#396AFF",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片",
+                  "OpenAI","ChatGPT","Agent","Claude","NVIDIA","自动驾驶"]},
+    {"name":"新浪科技","url":"https://tech.sina.com.cn/feed/","color":"#FF8200",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片",
+                  "OpenAI","ChatGPT","Agent","NVIDIA","英伟达","自动驾驶","机器学习"]},
+    {"name":"亿欧网","url":"https://www.iyiou.com/feed","color":"#2D9B5E",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片",
+                  "OpenAI","ChatGPT","Agent","自动驾驶"]},
+    {"name":"凤凰科技","url":"https://tech.ifeng.com/feed/","color":"#C0392B",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片",
+                  "OpenAI","ChatGPT","Agent","Claude","NVIDIA"]},
+    {"name":"界面新闻","url":"https://a.jiemian.com/index.php?m=index&a=rss","color":"#E60012",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片",
+                  "OpenAI","ChatGPT","Agent","自动驾驶","机器学习"]},
+    {"name":"腾讯科技","url":"https://tech.qq.com/web/feed.htm","color":"#005CBF",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片",
+                  "OpenAI","ChatGPT","Agent","NVIDIA","英伟达","自动驾驶"]},
+    {"name":"网易科技","url":"https://tech.163.com/special/feed/","color":"#C41230",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","智能","机器人","芯片",
+                  "OpenAI","ChatGPT","Agent","英伟达","NVIDIA"]},
+    {"name":"AI科技评论","url":"https://www.leiphone.com/category/ai/rss","color":"#1E1E1E",
+     "keywords":["AI","人工智能","大模型","GPT","LLM","机器学习","深度学习",
+                  "OpenAI","ChatGPT","Agent","Claude","NVIDIA"]},
+    # ═══ 英文 AI 源 (目标 ~5 个) ═══
     {"name":"OpenAI","url":"https://openai.com/blog/rss.xml","color":"#10a37f"},
     {"name":"Google AI","url":"https://blog.google/technology/ai/rss/","color":"#4285f4"},
     {"name":"ArXiv AI","url":"https://export.arxiv.org/rss/cs.AI","color":"#b31b1b"},
     {"name":"TechCrunch AI","url":"https://techcrunch.com/category/artificial-intelligence/feed/","color":"#0a960a"},
+    {"name":"VentureBeat AI","url":"https://venturebeat.com/category/ai/feed/","color":"#8B5CF6"},
 ]
 
 # ═══ RSS 抓取 ═══
