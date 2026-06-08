@@ -6,6 +6,11 @@ on:
     - cron: '7 * * * *'
   workflow_dispatch:
     # 支持手动触发
+  push:
+    branches: [main]
+    paths:
+      - 'generate.py'
+      - '.github/workflows/ai-news.yml'
 
 permissions:
   contents: write

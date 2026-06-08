@@ -169,7 +169,7 @@ aside.tl a:hover .tl-lbl,aside.tl a.on .tl-lbl{opacity:1}
     flex:1;min-width:0;padding:0;cursor:pointer;
     font-size:.95em;font-weight:440;color:var(--tx);line-height:1.75;
     transition:color .3s ease;letter-spacing:.02em;
-    word-break:break-all;overflow-wrap:break-word;
+    overflow-wrap:break-word;
 }
 .ni:hover .ntc{color:var(--accent)}
 .ni .ntc::after{content:"›";float:right;font-size:1.4em;color:var(--t3);font-weight:300;
